@@ -103,18 +103,30 @@ const TILE_LAYERS = {
 };
 
 /* =========================================================
-   INICIALIZAÇÃO DO MAPA EM MANAUS
+   INICIALIZAÇÃO DO MAPA (COM SUPORTE OFFLINE)
 ========================================================= */
-function initMap() {
-  const initialLat = MANAUS_COORDS.lat;
-  const initialLng = MANAUS_COORDS.lng;
+// Restaura última posição real do aparelho para carregamento offline instantâneo
+try {
+  const savedPos = localStorage.getItem('geopulse_last_known_pos');
+  if (savedPos) {
+    const parsed = JSON.parse(savedPos);
+    if (parsed.lat && parsed.lng) {
+      state.currentUser.lat = parsed.lat;
+      state.currentUser.lng = parsed.lng;
+      state.currentUser.accuracy = parsed.accuracy || 10;
+    }
+  }
+} catch (e) {
+  // ignore
+}
 
-  state.currentUser.lat = initialLat;
-  state.currentUser.lng = initialLng;
+function initMap() {
+  const initialLat = state.currentUser.lat || MANAUS_COORDS.lat;
+  const initialLng = state.currentUser.lng || MANAUS_COORDS.lng;
 
   map = L.map('map', {
     center: [initialLat, initialLng],
-    zoom: 14,
+    zoom: 15,
     zoomControl: false,
     attributionControl: false,
   });
@@ -125,7 +137,7 @@ function initMap() {
 
   // Círculo de precisão de radar ciano de alta visibilidade
   userAccuracyCircle = L.circle([initialLat, initialLng], {
-    radius: state.currentUser.accuracy,
+    radius: state.currentUser.accuracy || 10,
     color: '#00F0FF',
     fillColor: '#00F0FF',
     fillOpacity: 0.1,
@@ -133,15 +145,7 @@ function initMap() {
     dashArray: '4, 4',
   }).addTo(map);
 
-  // Se estiver em modo manual, clicar no mapa reposiciona
-  map.on('click', (e) => {
-    if (locationMode === 'manual') {
-      updateCurrentUserPosition(e.latlng.lat, e.latlng.lng, 8, 0);
-      const hudStatus = document.getElementById('hud-gps-status');
-      if (hudStatus) hudStatus.textContent = 'Posição Manual';
-      showToast('Marcador posicionado nas coordenadas indicadas.', 'info');
-    }
-  });
+  // O ponteiro do usuário é 100% atrelado ao GPS real. Clicar no mapa NÃO move o usuário.
 
   // Quando o mapa é arrastado manualmente pelo usuário, pausa o acompanhamento suave
   map.on('dragstart', () => {
@@ -233,24 +237,19 @@ function clearAllMembersAction() {
 }
 
 /**
- * Centraliza o mapa e o usuário diretamente em Manaus
+ * Visualiza o centro de Manaus no mapa sem mover o marcador real do GPS
  */
 export function goToManaus() {
   playTactileClick();
-  locationMode = 'manual';
   autoFollowUser = false;
-  updateCurrentUserPosition(MANAUS_COORDS.lat, MANAUS_COORDS.lng, 8, 0);
   map.flyTo([MANAUS_COORDS.lat, MANAUS_COORDS.lng], 14, { duration: 1.2 });
-  const hudStatus = document.getElementById('hud-gps-status');
-  if (hudStatus) hudStatus.textContent = 'Manaus (Manual)';
-  showToast('Mapa centralizado em Manaus. Toque no botão de mira para voltar ao GPS ao vivo.', 'info');
+  showToast('Visualizando Manaus. Toque em "Seguir Meu GPS" para retornar à sua posição.', 'info');
   const recenterBtn = document.getElementById('btn-recenter-floating');
   if (recenterBtn) {
     const lbl = document.getElementById('recenter-label');
-    if (lbl) lbl.textContent = 'Voltar ao GPS Ao Vivo';
+    if (lbl) lbl.textContent = 'Seguir Meu GPS';
     recenterBtn.style.display = 'inline-flex';
   }
-  renderMembersList();
 }
 
 /**
@@ -323,10 +322,10 @@ function createMarkerIcon(member) {
           ? `<div class="marker-heading-cone" style="transform: rotate(${member.heading}deg)"></div>`
           : ''
       }
-      <div class="marker-avatar-inner" title="${member.name} (${isMe ? 'Ponto Central VC · Arraste para reposicionar' : speedText})">
+      <div class="marker-avatar-inner" title="${member.name} (${isMe ? 'Ponto Central VC · GPS Ao Vivo via Satélite' : speedText})">
         ${member.sos ? '!' : (isMe ? 'VC' : avatar)}
       </div>
-      <div class="marker-label-tag">${isMe ? 'VC · COMANDO ATIVO' : `${member.name.split(' ')[0]} · ${speedText}`}</div>
+      <div class="marker-label-tag">${isMe ? 'VC · GPS AO VIVO' : `${member.name.split(' ')[0]} · ${speedText}`}</div>
     </div>
   `;
 
@@ -342,32 +341,12 @@ function updateMarkerForMember(member) {
   let marker = markersMap.get(member.id);
 
   if (!marker) {
-    // Marcador de VOCÊ é ARRASTÁVEL!
+    // Marcador de VOCÊ é 100% NÃO-ARRASTÁVEL: atrelado ao sinal de GPS real do celular
     marker = L.marker([member.lat, member.lng], {
       icon: createMarkerIcon(member),
       zIndexOffset: member.isMe ? 1000 : 500,
-      draggable: !!member.isMe,
+      draggable: false, // Bloqueado: NUNCA arrastável manualmente
     }).addTo(map);
-
-    // Se for o usuário principal, evento de arrastar e soltar
-    if (member.isMe) {
-      marker.on('dragend', (e) => {
-        const newPos = e.target.getLatLng();
-        locationMode = 'manual';
-        autoFollowUser = false;
-        updateCurrentUserPosition(newPos.lat, newPos.lng, 5, 0);
-        const hudStatus = document.getElementById('hud-gps-status');
-        if (hudStatus) hudStatus.textContent = 'Posição Ajustada';
-        showToast('Modo manual ativado. Toque no botão de mira ou em Seguir para voltar ao GPS ao vivo.', 'info');
-        const recenterBtn = document.getElementById('btn-recenter-floating');
-        if (recenterBtn) {
-          const lbl = document.getElementById('recenter-label');
-          if (lbl) lbl.textContent = 'Voltar ao GPS Ao Vivo';
-          recenterBtn.style.display = 'inline-flex';
-        }
-        renderMembersList();
-      });
-    }
 
     marker.on('click', () => {
       focusMember(member.id);
@@ -544,9 +523,13 @@ async function renderMembersList() {
   // Renderiza cartão de "Você"
   const isFocusedMe = activeFocusedMemberId === state.currentUser.id ? 'focused' : '';
   const mySpeedText = state.currentUser.speed > 1 ? `${Math.round(state.currentUser.speed)} km/h` : 'Parado';
-  const roleText = locationMode === 'gps'
-    ? 'GPS Ao Vivo · Telemetria em Tempo Real'
-    : 'Modo Manual · Posição Ajustada';
+  const isOnline = navigator.onLine;
+  const roleText = isOnline
+    ? 'GPS Ao Vivo · Telemetria via Satélite'
+    : 'GPS Satélite Ativo · Modo Offline';
+  const badgeHtml = isOnline
+    ? '<span class="live-tag-mini">AO VIVO</span>'
+    : '<span class="live-tag-offline">OFFLINE</span>';
 
   let html = `
     <div class="member-card member-card-shell ${isFocusedMe}" data-member-id="${state.currentUser.id}" style="--member-color: ${state.currentUser.color}">
@@ -561,7 +544,7 @@ async function renderMembersList() {
               <div class="member-name-row">
                 <span class="member-name">${state.currentUser.name}</span>
                 <span class="me-badge">VOCÊ</span>
-                ${locationMode === 'gps' ? '<span class="live-tag-mini">AO VIVO</span>' : ''}
+                ${badgeHtml}
               </div>
               <span class="member-role">${roleText}</span>
             </div>
@@ -577,7 +560,7 @@ async function renderMembersList() {
         </div>
         <div class="member-card-bottom">
           <span class="member-address" id="addr-me">Obtendo endereço...</span>
-          <span class="member-dist">${locationMode === 'gps' ? `Precisão ±${Math.round(state.currentUser.accuracy || 10)}m` : 'Seu Dispositivo'}</span>
+          <span class="member-dist">${isOnline ? `Precisão ±${Math.round(state.currentUser.accuracy || 10)}m` : 'Offline (Satélite)'}</span>
         </div>
       </div>
     </div>
@@ -723,9 +706,17 @@ function focusMember(memberId) {
 
 /* =========================================================
 /* =========================================================
-   GEOLOCALIZAÇÃO DO USUÁRIO EM TEMPO REAL (GPS DO CELULAR)
+   GEOLOCALIZAÇÃO DO USUÁRIO EM TEMPO REAL (GPS DO CELULAR & OFFLINE)
 ========================================================= */
 function throttledReverseGeocode(lat, lng) {
+  if (!navigator.onLine) {
+    const addrMe = document.getElementById('addr-me');
+    if (addrMe && (!addrMe.textContent || addrMe.textContent === 'Obtendo endereço...')) {
+      addrMe.textContent = 'GPS Satélite Ativo (Offline)';
+    }
+    return;
+  }
+
   const now = Date.now();
   if (lastGeocodedAddressCoords) {
     const dist = calculateDistance(lastGeocodedAddressCoords.lat, lastGeocodedAddressCoords.lng, lat, lng);
@@ -751,11 +742,33 @@ function updateCurrentUserPosition(lat, lng, accuracy = 10, speed = 0) {
   state.currentUser.speed = speed;
   state.currentUser.updatedAt = Date.now();
 
+  // Persistência local para modo offline
+  try {
+    localStorage.setItem(
+      'geopulse_last_known_pos',
+      JSON.stringify({
+        lat,
+        lng,
+        accuracy,
+        speed,
+        time: Date.now(),
+      })
+    );
+  } catch (e) {
+    // ignore
+  }
+
   if (!state.currentUser.history) state.currentUser.history = [];
   const lastH = state.currentUser.history[state.currentUser.history.length - 1];
   if (!lastH || calculateDistance(lastH.lat, lastH.lng, lat, lng) > 2.5) {
     state.currentUser.history.push({ lat, lng, time: Date.now() });
     if (state.currentUser.history.length > 50) state.currentUser.history.shift();
+
+    try {
+      localStorage.setItem('geopulse_offline_breadcrumbs', JSON.stringify(state.currentUser.history));
+    } catch (e) {
+      // ignore
+    }
   }
 
   // Atualiza HUD
@@ -768,8 +781,8 @@ function updateCurrentUserPosition(lat, lng, accuracy = 10, speed = 0) {
   updateAllMarkers();
   broadcastUserUpdate(state.currentUser);
 
-  // Transmite para celular/PC remoto conectado via WebRTC P2P na rua
-  if (p2pEngine) {
+  // Transmite para celular/PC remoto conectado via WebRTC P2P se online
+  if (p2pEngine && navigator.onLine) {
     p2pEngine.broadcastPosition(state.currentUser);
   }
 }
@@ -788,25 +801,29 @@ function startGeolocationTracking() {
   // Ativa Screen Wake Lock para o celular não desligar a tela durante o rastreamento
   enableScreenWakeLock();
 
-  if (hudGpsStatus) hudGpsStatus.textContent = 'Localizando GPS...';
+  const isOnline = navigator.onLine;
+  if (hudGpsStatus) {
+    hudGpsStatus.innerHTML = isOnline
+      ? '<span class="live-tag-mini">AO VIVO</span> Sintonizando...'
+      : '<span class="live-tag-offline">OFFLINE</span> Satélite Ativo...';
+  }
   if (hudDot) hudDot.className = 'hud-dot online pulse-live';
 
   const onSuccess = (pos) => {
-    // Esconde banner caso a permissão tenha sido concedida
     if (gpsBanner) gpsBanner.style.display = 'none';
 
-    // Se o usuário alternou explicitamente para manual via arrasto, respeitamos até clique em recentralizar
-    if (locationMode === 'manual') {
-      return;
-    }
-
     const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-    const speedKmH = (speed !== null && speed !== undefined && speed > 0) ? speed * 3.6 : 0;
+    const speedKmH = speed !== null && speed !== undefined && speed > 0 ? speed * 3.6 : 0;
 
+    const onlineNow = navigator.onLine;
     if (hudGpsStatus) {
-      hudGpsStatus.innerHTML = `<span class="live-tag-mini">AO VIVO</span> ${accuracy < 25 ? 'Alta Precisão' : 'GPS Ativo'}`;
+      if (onlineNow) {
+        hudGpsStatus.innerHTML = `<span class="live-tag-mini">AO VIVO</span> ${accuracy < 25 ? 'Alta Precisão' : 'GPS Ativo'}`;
+      } else {
+        hudGpsStatus.innerHTML = `<span class="live-tag-offline">OFFLINE</span> Satélite Ativo (±${Math.round(accuracy)}m)`;
+      }
     }
-    if (hudDot) hudDot.className = 'hud-dot online pulse-live';
+    if (hudDot) hudDot.className = onlineNow ? 'hud-dot online pulse-live' : 'hud-dot warning pulse-live';
 
     // Rumo/Direção vinda do GPS
     if (heading !== null && heading !== undefined && !isNaN(heading)) {
@@ -819,17 +836,23 @@ function startGeolocationTracking() {
     if (isFirstGpsFix) {
       isFirstGpsFix = false;
       map.flyTo([latitude, longitude], 16, { duration: 1.2 });
-      showToast('GPS ao vivo conectado! Rastreando seu celular.', 'info');
+      showToast(
+        onlineNow ? 'GPS ao vivo conectado via satélite!' : 'Modo Offline: GPS conectado diretamente via satélite!',
+        'info'
+      );
 
-      // Força geocodificação inicial imediata
-      reverseGeocode(latitude, longitude).then((addr) => {
+      if (onlineNow) {
+        reverseGeocode(latitude, longitude).then((addr) => {
+          const addrMe = document.getElementById('addr-me');
+          if (addrMe) addrMe.textContent = addr;
+        });
+        lastGeocodedAddressCoords = { lat: latitude, lng: longitude };
+        lastGeocodedAddressTime = Date.now();
+      } else {
         const addrMe = document.getElementById('addr-me');
-        if (addrMe) addrMe.textContent = addr;
-      });
-      lastGeocodedAddressCoords = { lat: latitude, lng: longitude };
-      lastGeocodedAddressTime = Date.now();
+        if (addrMe) addrMe.textContent = 'GPS Satélite Ativo (Offline)';
+      }
     } else if (autoFollowUser) {
-      // Acompanhamento suave no celular
       map.panTo([latitude, longitude], { animate: true, duration: 0.6 });
     }
 
@@ -840,16 +863,16 @@ function startGeolocationTracking() {
 
   const onError = (err) => {
     console.warn('Geolocation info:', err.code, err.message);
-    if (err.code === 1) { // PERMISSION_DENIED
+    if (err.code === 1) {
       if (hudGpsStatus) hudGpsStatus.textContent = 'Permissão Negada';
       if (hudDot) hudDot.className = 'hud-dot error';
       if (gpsBanner) gpsBanner.style.display = 'block';
       showToast('Permita a localização no celular para atualizar em tempo real.', 'sos');
-    } else if (err.code === 2) { // POSITION_UNAVAILABLE
+    } else if (err.code === 2) {
       if (hudGpsStatus) hudGpsStatus.textContent = 'Buscando Satélite...';
       if (hudDot) hudDot.className = 'hud-dot warning';
-    } else if (err.code === 3) { // TIMEOUT
-      if (hudGpsStatus) hudGpsStatus.textContent = 'Reconectando GPS...';
+    } else if (err.code === 3) {
+      if (hudGpsStatus) hudGpsStatus.textContent = 'Sintonizando Satélite...';
       if (hudDot) hudDot.className = 'hud-dot warning';
     }
   };
@@ -871,13 +894,11 @@ function startGeolocationTracking() {
 
   // 3. Heartbeat a cada 6s (impede que browsers mobile silenciem o GPS em repouso)
   setInterval(() => {
-    if (locationMode === 'gps') {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => onSuccess(pos),
-        () => {},
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-      );
-    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => onSuccess(pos),
+      () => {},
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+    );
   }, 6000);
 
   // 4. Bússola Digital do Aparelho (orienta o pino no mapa em tempo real)
@@ -1158,17 +1179,19 @@ function setupUIEventListeners() {
         itemEl.addEventListener('click', () => {
           const lat = parseFloat(itemEl.getAttribute('data-lat'));
           const lon = parseFloat(itemEl.getAttribute('data-lon'));
-          locationMode = 'manual';
-
-          updateCurrentUserPosition(lat, lon, 5, 0);
+          autoFollowUser = false;
           map.flyTo([lat, lon], 16, { duration: 1.2 });
 
-          const hudStatus = document.getElementById('hud-gps-status');
-          if (hudStatus) hudStatus.textContent = 'Endereço Definido';
+          const recenterBtn = document.getElementById('btn-recenter-floating');
+          if (recenterBtn) {
+            const lbl = document.getElementById('recenter-label');
+            if (lbl) lbl.textContent = 'Voltar ao Meu GPS';
+            recenterBtn.style.display = 'inline-flex';
+          }
 
           searchDropdown.style.display = 'none';
           searchInput.value = itemEl.querySelector('strong')?.textContent || '';
-          showToast('Posicionado no endereço selecionado.', 'info');
+          showToast(`Visualizando: ${itemEl.querySelector('strong')?.textContent || 'Local'}`, 'info');
           playRadarPing();
         });
       });
@@ -1383,10 +1406,59 @@ function updateP2PHUD() {
   }
 }
 
+function setupNetworkStatusListeners() {
+  const handleNetworkChange = () => {
+    const isOnline = navigator.onLine;
+    const hudDot = document.querySelector('#hud-user-status .hud-dot');
+    const hudGpsStatus = document.getElementById('hud-gps-status');
+    const p2pVal = document.getElementById('p2p-status-val');
+
+    if (isOnline) {
+      if (hudDot) hudDot.className = 'hud-dot online pulse-live';
+      if (hudGpsStatus) {
+        hudGpsStatus.innerHTML = '<span class="live-tag-mini">AO VIVO</span> GPS Satélite';
+      }
+      showToast('Conexão com a internet restabelecida!', 'info');
+      if (state.currentUser.lat && state.currentUser.lng) {
+        throttledReverseGeocode(state.currentUser.lat, state.currentUser.lng);
+      }
+      renderMembersList();
+    } else {
+      if (hudDot) hudDot.className = 'hud-dot warning pulse-live';
+      if (hudGpsStatus) {
+        hudGpsStatus.innerHTML = '<span class="live-tag-offline">OFFLINE</span> Satélite Ativo';
+      }
+      if (p2pVal) p2pVal.textContent = 'Modo Offline';
+      showToast('Modo Offline: O GPS continua ativo diretamente via satélite!', 'info');
+      renderMembersList();
+    }
+  };
+
+  window.addEventListener('online', handleNetworkChange);
+  window.addEventListener('offline', handleNetworkChange);
+}
+
+function registerServiceWorker() {
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          console.log('[SW] Service Worker registrado para funcionamento offline:', reg.scope);
+        })
+        .catch((err) => {
+          console.warn('[SW] Falha ao registrar Service Worker:', err);
+        });
+    });
+  }
+}
+
 // BOOTSTRAP DA APLICAÇÃO
 document.addEventListener('DOMContentLoaded', () => {
   initMap();
   startGeolocationTracking();
+  setupNetworkStatusListeners();
+  registerServiceWorker();
   renderMembersList();
   renderGeofencesSidebarList();
   setupUIEventListeners();
