@@ -1,0 +1,1994 @@
+/* GeoPulse - Central de Monitoramento Tático e Comando em Tempo Real
+   Diretrizes: Fundo de Alto Contraste (OLED Black + Midnight Navy), Mapa Tático, Marcador VC Pulsante em Ciano, SOS Neon e Painel Científico Militar */
+
+:root {
+  /* Fundo de Alto Contraste: Preto Absoluto e Azul-Escuro Profundo */
+  --bg-canvas: #05070B;
+  --bg-surface: #0A0F1D;
+  --bg-subtle: #0E162A;
+  --bg-hover: #141F38;
+  --bg-shell: rgba(14, 22, 42, 0.6);
+  --bg-shell-hover: rgba(20, 31, 56, 0.8);
+
+  /* Bordas e Hairlines Táticas */
+  --border-hairline: rgba(255, 255, 255, 0.09);
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-cyan-glow: rgba(0, 240, 255, 0.3);
+  --border-cyan-subtle: rgba(0, 240, 255, 0.15);
+
+  /* Cores de Texto de Alto Contraste */
+  --text-main: #F8FAFC;
+  --text-body: #CBD5E1;
+  --text-muted: #7E8B9B;
+  --text-faint: #475569;
+
+  /* Ciano Vibrante de Radar Tático */
+  --cyan-radar: #00F0FF;
+  --cyan-radar-dim: #06B6D4;
+  --cyan-radar-bg: rgba(0, 240, 255, 0.08);
+  --cyan-radar-border: rgba(0, 240, 255, 0.25);
+  --cyan-glow-ambient: 0 0 16px rgba(0, 240, 255, 0.45);
+
+  /* SOS Alerta Máximo (Vermelho-Neon Brilhante) */
+  --sos-neon: #FF1E46;
+  --sos-neon-bg: rgba(255, 30, 70, 0.16);
+  --sos-neon-border: rgba(255, 30, 70, 0.4);
+  --sos-glow: 0 0 24px rgba(255, 30, 70, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+
+  /* Status e Telmetria Científica */
+  --status-green: #10B981;
+  --status-green-bg: rgba(16, 185, 129, 0.12);
+  --status-green-border: rgba(16, 185, 129, 0.3);
+
+  --accent-amber: #F59E0B;
+  --accent-amber-bg: rgba(245, 158, 11, 0.12);
+
+  /* Tipografia Científica */
+  --font-sans: 'Geist', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Helvetica Neue', sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'JetBrains Mono', monospace;
+
+  /* Curvaturas Concêntricas (Double-Bezel) */
+  --radius-shell-lg: 18px;
+  --radius-core-lg: 14px;
+  --radius-shell-md: 14px;
+  --radius-core-md: 10px;
+  --radius-shell-sm: 10px;
+  --radius-core-sm: 7px;
+  --radius-pill: 9999px;
+
+  /* Sombras Profundas e Destaque Interno */
+  --shadow-ambient: 0 2px 8px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.6);
+  --shadow-elevated: 0 8px 24px rgba(0, 0, 0, 0.5), 0 24px 64px -12px rgba(0, 0, 0, 0.8);
+  --shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --shadow-inset-cyan: inset 0 1px 0 rgba(0, 240, 255, 0.3);
+
+  /* Dinâmica de Mola */
+  --ease-spring: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-normal: 240ms;
+  --duration-fast: 160ms;
+}
+
+/* =========================================================
+   RESET GLOBAL & SUPRESSÃO DE BARRAS DE ROLAGEM
+========================================================= */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar,
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  background-color: var(--bg-canvas);
+  color: var(--text-body);
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Números tabulares para telemetria científica */
+.hud-val,
+.speed-badge,
+.battery-badge,
+.member-dist,
+.code-val,
+.slider-badge,
+.fence-radius-tag,
+.brand-badge,
+.member-count-badge {
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+}
+
+/* Camada Tátil de Granulação (Film-Grain) */
+.ambient-noise-overlay {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+}
+
+/* =========================================================
+   BARRA SUPERIOR (Ilha Tática de Comando)
+========================================================= */
+.app-header-shell {
+  padding: 8px 14px 6px 14px;
+  background: transparent;
+  z-index: 1000;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.app-header-core {
+  height: 50px;
+  background: rgba(10, 15, 29, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-lg);
+  box-shadow: var(--shadow-ambient), var(--shadow-inset-highlight);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px 0 14px;
+  gap: 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.brand-radar {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.radar-dot {
+  width: 8px;
+  height: 8px;
+  background: var(--cyan-radar);
+  border-radius: 50%;
+  box-shadow: 0 0 8px var(--cyan-radar);
+  position: relative;
+  z-index: 2;
+}
+
+.radar-ping {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 240, 255, 0.25);
+  animation: tacticalRadarWave 2.4s var(--ease-spring) infinite;
+  z-index: 1;
+}
+
+@keyframes tacticalRadarWave {
+  0% { transform: scale(0.5); opacity: 0.9; }
+  75% { transform: scale(2.4); opacity: 0; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.brand-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.brand-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.brand-badge {
+  font-size: 8px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  background: var(--cyan-radar-bg);
+  color: var(--cyan-radar);
+  border: 1px solid var(--cyan-radar-border);
+  padding: 2px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.1em;
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+  white-space: nowrap;
+}
+
+.circle-selector-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px 3px 5px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-body);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-spring);
+  min-width: 0;
+  flex-shrink: 1;
+  overflow: hidden;
+}
+
+.circle-selector-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--cyan-radar-border);
+  color: var(--text-main);
+  transform: translateY(-0.5px);
+}
+
+.chip-icon-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--bg-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chip-icon-box .icon {
+  width: 11px;
+  height: 11px;
+  color: var(--cyan-radar);
+}
+
+#header-circle-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.member-count-badge {
+  background: var(--cyan-radar-bg);
+  color: var(--cyan-radar);
+  border: 1px solid var(--cyan-radar-border);
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* =========================================================
+   BOTÕES (Button-in-Button com Destaque Neon SOS)
+========================================================= */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 5px 6px 5px 12px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  cursor: pointer;
+  outline: none;
+  transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.btn:active {
+  transform: scale(0.975);
+}
+
+.btn-icon-wrapper {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform var(--duration-normal) var(--ease-spring);
+}
+
+.btn:hover .btn-icon-wrapper {
+  transform: translate(1px, -1px);
+}
+
+.icon {
+  width: 13.5px;
+  height: 13.5px;
+  stroke-width: 2;
+  flex-shrink: 0;
+}
+
+/* Botões Secundários de Controle */
+.btn-secondary {
+  background: var(--bg-surface);
+  color: var(--text-body);
+  border: 1px solid var(--border-hairline);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3), var(--shadow-inset-highlight);
+}
+
+.btn-secondary .btn-icon-wrapper {
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--cyan-radar-border);
+  color: var(--text-main);
+}
+
+.btn-secondary:hover .btn-icon-wrapper {
+  background: rgba(0, 240, 255, 0.15);
+  color: var(--cyan-radar);
+}
+
+/* Botão Primário Ciano Tático */
+.btn-primary {
+  background: var(--cyan-radar);
+  color: #05070B;
+  font-weight: 600;
+  border-color: var(--cyan-radar);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.btn-primary .btn-icon-wrapper {
+  background: rgba(5, 7, 11, 0.2);
+  color: #05070B;
+}
+
+.btn-primary:hover {
+  background: #33F3FF;
+  box-shadow: 0 0 24px rgba(0, 240, 255, 0.6);
+}
+
+/* SOS em Alerta Máximo (Vermelho-Neon Brilhante e Radiante) */
+.btn-danger {
+  background: var(--sos-neon);
+  color: #FFFFFF;
+  font-weight: 700;
+  border-color: var(--sos-neon);
+  box-shadow: var(--sos-glow);
+  animation: sosButtonBreath 2s infinite ease-in-out;
+}
+
+@keyframes sosButtonBreath {
+  0% { box-shadow: 0 0 14px rgba(255, 30, 70, 0.45); }
+  50% { box-shadow: 0 0 28px rgba(255, 30, 70, 0.8), 0 0 6px #FFFFFF; }
+  100% { box-shadow: 0 0 14px rgba(255, 30, 70, 0.45); }
+}
+
+.btn-danger .btn-icon-wrapper {
+  background: rgba(255, 255, 255, 0.25);
+  color: #FFFFFF;
+}
+
+.btn-danger:hover {
+  background: #FF385C;
+  box-shadow: 0 0 32px rgba(255, 30, 70, 0.9);
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+
+/* =========================================================
+   CONTAINER DO MAPA TÁTICO DE MANAUS
+========================================================= */
+.main-container {
+  flex: 1;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+  height: calc(100dvh - 70px);
+}
+
+#map-wrapper {
+  flex: 1;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  background-color: var(--bg-canvas);
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  background-color: var(--bg-canvas);
+  z-index: 1;
+}
+
+/* =========================================================
+   REALCE TÁTICO DO MAPA DE MANAUS (Rio Negro e Rotas HD)
+========================================================= */
+.leaflet-tile-pane {
+  filter: contrast(1.18) brightness(0.88) saturate(1.15);
+}
+
+/* =========================================================
+   HUD CIENTÍFICO (Telemetria em Tempo Real na Base Tática)
+========================================================= */
+.map-hud-shell {
+  position: absolute;
+  bottom: 18px;
+  left: 16px;
+  z-index: 500;
+  background: var(--bg-shell);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-shell-md);
+  padding: 3px;
+  box-shadow: var(--shadow-ambient);
+  max-width: calc(100vw - 32px);
+}
+
+.map-hud-core {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(10, 15, 29, 0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--radius-core-md);
+  padding: 6px 14px;
+  box-shadow: var(--shadow-inset-highlight);
+}
+
+.hud-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.hud-item:not(:last-child)::after {
+  content: '';
+  display: block;
+  width: 1px;
+  height: 12px;
+  background: var(--border-hairline);
+  margin-left: 6px;
+}
+
+.hud-label {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.hud-val {
+  color: var(--text-main);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.hud-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+.hud-dot.online {
+  background: var(--cyan-radar);
+  box-shadow: 0 0 8px var(--cyan-radar);
+}
+
+/* =========================================================
+   BARRA DE BUSCA CIENTÍFICA (Coordenadas e Endereço)
+========================================================= */
+.map-search-bar {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  z-index: 550;
+  width: 320px;
+  max-width: calc(100vw - 32px);
+}
+
+.search-shell {
+  background: var(--bg-shell);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-shell-md);
+  padding: 3px;
+  box-shadow: var(--shadow-ambient);
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.search-shell:focus-within {
+  border-color: var(--cyan-radar-border);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.15);
+}
+
+.search-input-wrap {
+  display: flex;
+  align-items: center;
+  background: var(--bg-surface);
+  border-radius: var(--radius-core-md);
+  padding: 6px 10px;
+  gap: 8px;
+  box-shadow: var(--shadow-inset-highlight);
+}
+
+.search-icon-box {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.search-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--cyan-radar);
+}
+
+#map-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+}
+
+#map-search-input::placeholder {
+  color: var(--text-faint);
+}
+
+.btn-search-clear {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0 4px;
+}
+
+.btn-search-clear:hover {
+  color: var(--text-main);
+}
+
+.search-dropdown {
+  margin-top: 6px;
+  background: rgba(10, 15, 29, 0.96);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-elevated);
+  display: flex;
+  flex-direction: column;
+}
+
+.search-result-item {
+  padding: 9px 12px;
+  font-size: 12px;
+  color: var(--text-body);
+  cursor: pointer;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transition: background var(--duration-fast) var(--ease-spring);
+}
+
+.search-result-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--cyan-radar-border);
+}
+
+.search-result-item strong {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.search-result-item span {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* =========================================================
+   CONTROLES FLUTUANTES (Cápsula de Camadas & Ferramentas)
+========================================================= */
+#layer-switcher-capsule {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 500;
+}
+
+.ctrl-group-shell {
+  background: var(--bg-shell);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-shell-md);
+  padding: 3px;
+  box-shadow: var(--shadow-ambient);
+}
+
+.map-control-group {
+  display: flex;
+  background: rgba(10, 15, 29, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-radius: var(--radius-core-md);
+  padding: 3px;
+  gap: 3px;
+  box-shadow: var(--shadow-inset-highlight);
+}
+
+.btn-ctrl {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 7px;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.btn-ctrl:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.btn-ctrl.active {
+  background: var(--cyan-radar);
+  color: #05070B;
+  font-weight: 700;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+}
+
+#map-quick-tools {
+  position: absolute;
+  top: 58px;
+  right: 16px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.map-control-column {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn-icon-float {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-core-md);
+  background: rgba(10, 15, 29, 0.92);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid var(--border-hairline);
+  color: var(--text-body);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--shadow-ambient), var(--shadow-inset-highlight);
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.btn-icon-float:hover {
+  background: var(--bg-hover);
+  border-color: var(--cyan-radar-border);
+  color: var(--cyan-radar);
+  transform: translateY(-1px);
+}
+
+.btn-icon-float:active {
+  transform: scale(0.96);
+}
+
+.btn-icon-float.active {
+  background: var(--cyan-radar);
+  color: #05070B;
+  border-color: var(--cyan-radar);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.5);
+}
+
+/* =========================================================
+   SIDEBAR (Painel Científico & Vetores no Radar)
+========================================================= */
+.sidebar {
+  width: 370px;
+  min-width: 370px;
+  height: 100%;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-hairline);
+  display: flex;
+  flex-direction: column;
+  z-index: 600;
+  overflow-y: auto;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sidebar-drag-handle {
+  display: none;
+  width: 38px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-pill);
+  margin: 10px auto 4px auto;
+}
+
+.sidebar-header {
+  padding: 18px 20px 14px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.sidebar-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-with-badge h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+}
+
+.live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--cyan-radar);
+  background: var(--cyan-radar-bg);
+  border: 1px solid var(--cyan-radar-border);
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.05em;
+}
+
+.status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--cyan-radar);
+  box-shadow: 0 0 6px var(--cyan-radar);
+}
+
+.sidebar-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
+}
+
+.btn-text-danger {
+  background: var(--sos-neon-bg);
+  border: 1px solid var(--sos-neon-border);
+  color: var(--sos-neon);
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: var(--radius-pill);
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.btn-text-danger:hover {
+  background: rgba(255, 30, 70, 0.3);
+}
+
+/* Membros Container */
+.members-container {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Double-Bezel Member Card (Painel Científico) */
+.member-card-shell {
+  background: var(--bg-shell);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-shell-md);
+  padding: 3px;
+  cursor: pointer;
+  transition: all var(--duration-normal) var(--ease-spring);
+}
+
+.member-card-shell:hover {
+  background: var(--bg-shell-hover);
+  border-color: var(--cyan-radar-border);
+  transform: translateY(-1px);
+}
+
+.member-card-shell.focused {
+  border-color: var(--cyan-radar);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.2);
+}
+
+.member-card-core {
+  background: var(--bg-surface);
+  border-radius: var(--radius-core-md);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-ambient), var(--shadow-inset-highlight);
+  transition: background var(--duration-fast) var(--ease-spring);
+}
+
+.member-card-shell.focused .member-card-core {
+  background: #0E162A;
+}
+
+.member-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.member-info-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.member-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-core-sm);
+  background: var(--bg-subtle);
+  color: var(--cyan-radar);
+  border: 1px solid var(--cyan-radar-border);
+  font-weight: 700;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.member-avatar .online-indicator {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--cyan-radar);
+  border: 1.5px solid var(--bg-surface);
+  box-shadow: 0 0 6px var(--cyan-radar);
+}
+
+.member-names {
+  display: flex;
+  flex-direction: column;
+}
+
+.member-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.member-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.me-badge {
+  font-size: 8.5px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  background: var(--cyan-radar-bg);
+  color: var(--cyan-radar);
+  border: 1px solid var(--cyan-radar-border);
+  letter-spacing: 0.08em;
+}
+
+.member-role {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.member-status-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.member-actions-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.member-status-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+
+.speed-badge {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-subtle);
+  color: var(--text-muted);
+  border: 1px solid var(--border-hairline);
+}
+
+.speed-badge.moving {
+  background: var(--cyan-radar-bg);
+  color: var(--cyan-radar);
+  border-color: var(--cyan-radar-border);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.2);
+}
+
+.battery-badge {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.btn-delete-member {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-spring);
+  flex-shrink: 0;
+}
+
+.btn-delete-member:hover {
+  background: var(--sos-neon-bg);
+  border-color: var(--sos-neon-border);
+  color: var(--sos-neon);
+}
+
+.delete-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.member-card-bottom {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.member-address {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
+  font-size: 10.5px;
+}
+
+.member-dist {
+  color: var(--cyan-radar);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Seção Cercas Virtuais */
+.geofences-section {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-hairline);
+}
+
+.section-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-header-row h4 {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.btn-text-action {
+  background: none;
+  border: none;
+  color: var(--cyan-radar);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.geofence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.geofence-chip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-sm);
+  font-size: 11.5px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.geofence-chip:hover {
+  background: var(--bg-hover);
+  border-color: var(--cyan-radar-border);
+}
+
+.fence-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.fence-color-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.fence-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fence-radius-tag {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.btn-delete-fence {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.btn-delete-fence:hover {
+  color: var(--sos-neon);
+}
+
+/* Empty States */
+.empty-state-box {
+  padding: 16px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-sm);
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+
+.empty-state-members {
+  padding: 24px 16px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-md);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.empty-radar-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-core-sm);
+  background: var(--bg-surface);
+  border: 1px solid var(--cyan-radar-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--cyan-radar);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.2);
+  margin-bottom: 2px;
+}
+
+.empty-state-members h4 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.empty-state-members p {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  max-width: 240px;
+}
+
+.interactive-tip {
+  margin: 14px 20px;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-sm);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 9px;
+  line-height: 1.45;
+  font-family: var(--font-mono);
+}
+
+.tip-icon-box {
+  flex-shrink: 0;
+}
+
+.tip-icon {
+  width: 14px;
+  height: 14px;
+  color: var(--cyan-radar);
+}
+
+/* =========================================================
+   MARCADOR "VC" (PONTO CENTRAL DE CONTROLE PULSANTE EM CIANO)
+========================================================= */
+.custom-radar-marker {
+  position: relative;
+  width: 52px;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Anéis Pulsantes de Radar Ciano Vibrante */
+.marker-radar-ping {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--cyan-radar);
+  background: rgba(0, 240, 255, 0.15);
+  animation: radarPingPulse 2.2s infinite var(--ease-spring);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.marker-radar-outer-ring {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px dashed rgba(0, 240, 255, 0.6);
+  animation: radarOuterRingSpin 10s infinite linear;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.marker-radar-sweep {
+  position: absolute;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  animation: radarSweepWave 2.2s 0.6s infinite var(--ease-spring);
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes radarPingPulse {
+  0% { transform: scale(0.6); opacity: 1; }
+  80% { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes radarSweepWave {
+  0% { transform: scale(0.8); opacity: 0.8; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+
+@keyframes radarOuterRingSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Avatar do Ponto Central "VC" */
+.marker-avatar-inner {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  color: var(--cyan-radar);
+  font-size: 11.5px;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--cyan-radar);
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.5), inset 0 0 6px rgba(0, 240, 255, 0.3);
+  z-index: 3;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.custom-radar-marker.is-command-center .marker-avatar-inner {
+  background: var(--cyan-radar);
+  color: #05070B;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.9), 0 0 8px #FFFFFF;
+  animation: vcMarkerHeartbeat 2.4s infinite ease-in-out;
+}
+
+@keyframes vcMarkerHeartbeat {
+  0% { transform: scale(1); box-shadow: 0 0 16px rgba(0, 240, 255, 0.8), 0 0 4px #FFFFFF; }
+  50% { transform: scale(1.08); box-shadow: 0 0 26px rgba(0, 240, 255, 1), 0 0 10px #FFFFFF; }
+  100% { transform: scale(1); box-shadow: 0 0 16px rgba(0, 240, 255, 0.8), 0 0 4px #FFFFFF; }
+}
+
+.marker-avatar-inner:hover {
+  transform: scale(1.14);
+}
+
+.marker-heading-cone {
+  position: absolute;
+  top: -8px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 9px solid var(--cyan-radar);
+  filter: drop-shadow(0 0 4px var(--cyan-radar));
+  transform-origin: bottom center;
+  z-index: 2;
+}
+
+.marker-label-tag {
+  position: absolute;
+  bottom: -20px;
+  background: rgba(5, 7, 11, 0.95);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--cyan-radar);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 1.5px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--cyan-radar-border);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  letter-spacing: 0.05em;
+}
+
+/* Marcador em Alerta SOS */
+.custom-radar-marker.sos .marker-avatar-inner {
+  background: var(--sos-neon) !important;
+  color: #FFFFFF !important;
+  border-color: #FFFFFF !important;
+  box-shadow: 0 0 24px var(--sos-neon), 0 0 8px #FFFFFF !important;
+  animation: sosMarkerExplode 1s infinite;
+}
+
+@keyframes sosMarkerExplode {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+.marker-popup-card {
+  padding: 8px 4px;
+  text-align: center;
+  min-width: 130px;
+  font-family: var(--font-sans);
+  background: var(--bg-surface);
+}
+
+.btn-popup-delete {
+  background: var(--sos-neon-bg);
+  color: var(--sos-neon);
+  border: 1px solid var(--sos-neon-border);
+  padding: 5px 10px;
+  border-radius: var(--radius-core-sm);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 6px;
+  width: 100%;
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.btn-popup-delete:hover {
+  background: rgba(255, 30, 70, 0.35);
+}
+
+/* =========================================================
+   MODAIS (Gabinete Tático Double-Bezel)
+========================================================= */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 5, 8, 0.75);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card-shell {
+  width: 100%;
+  max-width: 420px;
+  background: var(--bg-shell);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-shell-lg);
+  padding: 4px;
+  box-shadow: var(--shadow-elevated);
+}
+
+.modal-card-core {
+  background: var(--bg-surface);
+  border-radius: var(--radius-core-lg);
+  box-shadow: var(--shadow-inset-highlight);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 18px 12px 18px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.modal-header-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modal-eyebrow {
+  font-size: 9px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--cyan-radar);
+}
+
+.modal-header h3 {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.modal-close:hover {
+  color: var(--text-main);
+}
+
+.modal-body {
+  padding: 18px;
+}
+
+.modal-desc {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.circle-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-md);
+  padding: 10px 14px;
+  margin-bottom: 16px;
+}
+
+.code-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.code-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+.code-val {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--cyan-radar);
+  letter-spacing: 1.5px;
+}
+
+.qr-preview-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+  background: #FFFFFF;
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-md);
+  margin-bottom: 16px;
+  box-shadow: 0 0 16px rgba(0, 0, 0, 0.4);
+}
+
+#qr-container svg {
+  width: 140px;
+  height: 140px;
+}
+
+.qr-hint {
+  font-size: 10px;
+  color: #334155;
+  margin-top: 8px;
+  font-weight: 500;
+}
+
+.share-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-link-row input {
+  flex: 1;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-sm);
+  padding: 7px 12px;
+  color: var(--cyan-radar);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+.form-group {
+  margin-bottom: 14px;
+}
+
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.slider-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cyan-radar);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-body);
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.form-group input[type="text"] {
+  width: 100%;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-hairline);
+  border-radius: var(--radius-core-sm);
+  padding: 8px 12px;
+  color: var(--text-main);
+  font-size: 12px;
+  outline: none;
+}
+
+.form-group input[type="text"]:focus {
+  border-color: var(--cyan-radar);
+}
+
+.form-group input[type="range"] {
+  width: 100%;
+  accent-color: var(--cyan-radar);
+}
+
+.color-picker-row {
+  display: flex;
+  gap: 8px;
+}
+
+.color-dot {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform var(--duration-fast) var(--ease-spring);
+}
+
+.color-dot.active {
+  border-color: #FFFFFF;
+  transform: scale(1.15);
+  box-shadow: 0 0 10px currentColor;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* =========================================================
+   NOTIFICAÇÕES TOAST & BANNER SOS
+========================================================= */
+.toast-container {
+  position: fixed;
+  bottom: 22px;
+  left: 22px;
+  z-index: 3000;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  background: rgba(10, 15, 29, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: var(--text-main);
+  border: 1px solid var(--border-hairline);
+  padding: 9px 15px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  font-size: 11.5px;
+  font-weight: 500;
+  animation: toastSlideUp 0.22s var(--ease-spring);
+  max-width: 340px;
+}
+
+@keyframes toastSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.toast.geofence {
+  border-color: rgba(0, 240, 255, 0.4);
+  color: var(--cyan-radar);
+}
+
+.toast.sos {
+  background: rgba(255, 30, 70, 0.95);
+  color: #FFFFFF;
+  border-color: var(--sos-neon);
+  box-shadow: 0 0 24px rgba(255, 30, 70, 0.7);
+}
+
+/* SOS Banner em Alerta Máximo */
+.sos-banner {
+  position: fixed;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1500;
+  background: var(--sos-neon);
+  color: #FFFFFF;
+  border-radius: var(--radius-pill);
+  padding: 7px 18px;
+  box-shadow: 0 0 32px rgba(255, 30, 70, 0.8), 0 0 10px #FFFFFF;
+  animation: bannerAlarmPulse 1s infinite alternate;
+}
+
+@keyframes bannerAlarmPulse {
+  0% { transform: translate(-50%, 0) scale(1); }
+  100% { transform: translate(-50%, 0) scale(1.02); }
+}
+
+.sos-banner-content {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sos-pulse-icon {
+  font-weight: 800;
+  font-size: 13px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sos-info strong {
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
+
+.sos-info span {
+  font-size: 10.5px;
+  opacity: 0.9;
+  margin-left: 6px;
+}
+
+.btn-sos-dismiss {
+  background: rgba(255, 255, 255, 0.25);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-spring);
+}
+
+.btn-sos-dismiss:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+
+/* =========================================================
+   ADAPTAÇÃO RESPONSIVA (Enquadramento Tático Total)
+========================================================= */
+@media (max-width: 900px) {
+  .btn-text {
+    display: none;
+  }
+
+  .btn {
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .btn-icon-wrapper {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #btn-sos {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-header-shell {
+    padding: 6px 10px 4px 10px;
+  }
+
+  .app-header-core {
+    height: 46px;
+    padding: 0 8px;
+    gap: 6px;
+  }
+
+  .header-left {
+    gap: 6px;
+  }
+
+  .brand-title {
+    font-size: 13px;
+  }
+
+  #header-circle-name {
+    display: none;
+  }
+
+  .circle-selector-chip {
+    padding: 3px 6px;
+    gap: 4px;
+  }
+
+  .header-actions {
+    gap: 5px;
+    flex-shrink: 0;
+  }
+
+  .main-container {
+    flex-direction: column;
+    height: calc(100dvh - 56px);
+  }
+
+  #map-wrapper {
+    height: 100%;
+  }
+
+  /* Barra de busca no topo com largura total adaptada */
+  .map-search-bar {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    max-width: none;
+    z-index: 550;
+  }
+
+  .search-input-wrap {
+    padding: 5px 8px;
+    gap: 6px;
+  }
+
+  #map-search-input {
+    font-size: 12px;
+  }
+
+  /* Cápsula de camadas abaixo da busca, à esquerda */
+  #layer-switcher-capsule {
+    position: absolute;
+    top: 50px;
+    left: 10px;
+    right: auto;
+    bottom: auto;
+    z-index: 500;
+  }
+
+  .map-control-group {
+    padding: 2px;
+    gap: 2px;
+  }
+
+  .btn-ctrl {
+    padding: 4px 7px;
+    font-size: 10px;
+    border-radius: 5px;
+  }
+
+  /* Coluna de ferramentas abaixo da busca, à direita */
+  #map-quick-tools {
+    position: absolute;
+    top: 50px;
+    right: 10px;
+    bottom: auto;
+    z-index: 500;
+    gap: 5px;
+  }
+
+  .btn-icon-float {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-core-sm);
+  }
+
+  .btn-icon-float .icon {
+    width: 14.5px;
+    height: 14.5px;
+  }
+
+  /* HUD de telemetria abaixo das camadas, à esquerda */
+  .map-hud-shell {
+    position: absolute;
+    top: 86px;
+    left: 10px;
+    right: auto;
+    bottom: auto;
+    max-width: calc(100vw - 56px);
+    z-index: 490;
+    padding: 2px;
+    border-radius: var(--radius-shell-sm);
+  }
+
+  .map-hud-core {
+    padding: 3px 8px;
+    gap: 6px;
+    font-size: 9.5px;
+    border-radius: var(--radius-core-sm);
+    overflow-x: auto;
+    white-space: nowrap;
+    scrollbar-width: none !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .hud-item {
+    font-size: 9.5px;
+    gap: 4px;
+  }
+
+  .hud-item:not(:last-child)::after {
+    height: 10px;
+    margin-left: 4px;
+  }
+
+  .hud-label {
+    font-size: 8px;
+  }
+
+  .hud-val {
+    font-size: 9.5px;
+  }
+
+  /* Dock Inferior Mobile com Fundo Preto e Azul Profundo */
+  .sidebar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    min-width: 100%;
+    height: 48%;
+    background: #080C18;
+    border-left: none;
+    border-top: 1px solid var(--border-hairline);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.8);
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .sidebar-drag-handle {
+    display: block;
+  }
+
+  .sidebar.collapsed {
+    height: 50px;
+    overflow: hidden;
+  }
+
+  .toast-container {
+    bottom: 50%;
+    left: 14px;
+    right: 14px;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-badge {
+    display: none;
+  }
+
+  .btn-ctrl {
+    padding: 4px 6px;
+    font-size: 9.5px;
+  }
+}

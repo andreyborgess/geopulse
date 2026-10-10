@@ -1,0 +1,17 @@
+{
+  "name": "GeoPulse - Rastreamento em Tempo Real",
+  "short_name": "GeoPulse",
+  "description": "Aplicativo de rastreamento de localização e círculos em tempo real",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
