@@ -66,24 +66,34 @@ let lastGeocodedAddressCoords = null;
 let lastGeocodedAddressTime = 0;
 let lastFollowCoords = null;
 let activeRoutePolyline = null;
+let selectedProfilePhoto = '';
 
 const markersMap = new Map();
 const placeCirclesMap = new Map();
 const placeMarkersMap = new Map();
 let userAccuracyCircle = null;
 
-// Provedores de Tiles 100% Livres de API Key e Rate Limits
+// Provedores de Tiles 100% Livres de API Key, Rate Limits e Watermarks
 const TILE_LAYERS = {
-  // Modo Escuro Sofisticado Apple Find My (CartoDB Dark Matter Retina - 0% Artefatos)
-  dark: L.tileLayer(
-    'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
-    {
-      subdomains: 'abcd',
-      maxZoom: 20,
-      attribution:
-        '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }
-  ),
+  // Modo Escuro Nativo Oficial Esri (100% Livre de Watermark e API Key)
+  dark: L.layerGroup([
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxNativeZoom: 16,
+        maxZoom: 19,
+        attribution: 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ',
+      }
+    ),
+    L.tileLayer(
+      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+      {
+        maxNativeZoom: 16,
+        maxZoom: 19,
+        pane: 'overlayPane',
+      }
+    ),
+  ]),
   // Modo Satélite Esri de Alta Resolução
   satellite: L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -659,6 +669,57 @@ function closeMemberDetailSheet() {
 }
 
 /* =========================================================
+   COMPRESSÃO E TRATAMENTO DE IMAGEM DA GALERIA
+========================================================= */
+function compressImageFile(file, maxSize = 240, quality = 0.85) {
+  return new Promise((resolve, reject) => {
+    if (!file || !file.type.startsWith('image/')) {
+      return reject(new Error('Selecione uma imagem válida da galeria.'));
+    }
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('Erro ao ler a foto do celular.'));
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('Não foi possível carregar a imagem.'));
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          canvas.width = maxSize;
+          canvas.height = maxSize;
+          const ctx = canvas.getContext('2d');
+
+          // Corte quadrado centralizado proporcional
+          const minSide = Math.min(img.width, img.height);
+          const startX = (img.width - minSide) / 2;
+          const startY = (img.height - minSide) / 2;
+
+          ctx.drawImage(img, startX, startY, minSide, minSide, 0, 0, maxSize, maxSize);
+          const dataUrl = canvas.toDataURL('image/jpeg', quality);
+          resolve(dataUrl);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function updateHeaderProfileUI() {
+  const headerAvatar = document.getElementById('header-user-avatar');
+  if (headerAvatar) {
+    if (state.currentUser.photo) {
+      headerAvatar.style.backgroundImage = `url('${state.currentUser.photo}')`;
+      headerAvatar.textContent = '';
+    } else {
+      headerAvatar.style.backgroundImage = '';
+      headerAvatar.textContent = state.currentUser.avatar || 'VC';
+    }
+  }
+}
+
+/* =========================================================
    MODAL MEU PERFIL
 ========================================================= */
 function openProfileModal() {
@@ -667,18 +728,35 @@ function openProfileModal() {
   const inputName = document.getElementById('input-profile-name');
   const previewName = document.getElementById('profile-edit-name-preview');
   const previewAvatar = document.getElementById('profile-edit-avatar-preview');
+  const btnRemovePhoto = document.getElementById('btn-remove-custom-photo');
 
   if (inputName) inputName.value = state.currentUser.name;
   if (previewName) previewName.textContent = state.currentUser.name;
+
+  selectedProfilePhoto = state.currentUser.photo || '';
+
   if (previewAvatar) {
-    if (state.currentUser.photo) {
-      previewAvatar.style.backgroundImage = `url('${state.currentUser.photo}')`;
+    if (selectedProfilePhoto) {
+      previewAvatar.style.backgroundImage = `url('${selectedProfilePhoto}')`;
       previewAvatar.textContent = '';
     } else {
       previewAvatar.style.backgroundImage = '';
       previewAvatar.textContent = state.currentUser.avatar;
     }
   }
+
+  if (btnRemovePhoto) {
+    btnRemovePhoto.style.display = selectedProfilePhoto ? 'block' : 'none';
+  }
+
+  document.querySelectorAll('.avatar-choice-btn').forEach((btn) => {
+    const photo = btn.getAttribute('data-photo') || '';
+    if (photo === selectedProfilePhoto) {
+      btn.classList.add('active');
+    } else {
+      btn.classList.remove('active');
+    }
+  });
 
   if (modal) modal.style.display = 'flex';
 }
@@ -1025,22 +1103,86 @@ function setupUIEventListeners() {
 
   document.getElementById('btn-close-member-detail')?.addEventListener('click', closeMemberDetailSheet);
 
-  // Salvar Perfil
-  let selectedProfilePhoto = state.currentUser.photo || '';
+  // Upload e Seleção de Foto da Galeria do Celular
+  const inputProfileFile = document.getElementById('input-profile-photo-file');
+  const btnPickGallery = document.getElementById('btn-pick-from-gallery');
+  const btnTriggerAvatar = document.getElementById('btn-trigger-avatar-click');
+  const btnTriggerBadge = document.getElementById('btn-trigger-badge-click');
+  const previewAvatar = document.getElementById('profile-edit-avatar-preview');
+  const btnRemovePhoto = document.getElementById('btn-remove-custom-photo');
+
+  const openPhoneGallery = () => {
+    playTactileClick();
+    inputProfileFile?.click();
+  };
+
+  btnPickGallery?.addEventListener('click', openPhoneGallery);
+  btnTriggerAvatar?.addEventListener('click', openPhoneGallery);
+  btnTriggerBadge?.addEventListener('click', openPhoneGallery);
+
+  inputProfileFile?.addEventListener('change', async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      showToast('Processando foto...', 'info');
+      const compressedDataUrl = await compressImageFile(file, 240, 0.85);
+      selectedProfilePhoto = compressedDataUrl;
+
+      if (previewAvatar) {
+        previewAvatar.style.backgroundImage = `url('${selectedProfilePhoto}')`;
+        previewAvatar.textContent = '';
+      }
+
+      if (btnRemovePhoto) btnRemovePhoto.style.display = 'block';
+
+      document.querySelectorAll('.avatar-choice-btn').forEach((b) => b.classList.remove('active'));
+
+      showToast('Foto carregada da galeria!', 'info');
+      playTactileClick();
+    } catch (err) {
+      showToast('Erro ao carregar foto: ' + err.message, 'error');
+    } finally {
+      inputProfileFile.value = '';
+    }
+  });
+
+  btnRemovePhoto?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    playTactileClick();
+    selectedProfilePhoto = '';
+    if (previewAvatar) {
+      previewAvatar.style.backgroundImage = '';
+      previewAvatar.textContent = state.currentUser.avatar;
+    }
+    btnRemovePhoto.style.display = 'none';
+
+    document.querySelectorAll('.avatar-choice-btn').forEach((b) => {
+      if ((b.getAttribute('data-photo') || '') === '') {
+        b.classList.add('active');
+      } else {
+        b.classList.remove('active');
+      }
+    });
+    showToast('Foto removida.', 'info');
+  });
+
   document.querySelectorAll('.avatar-choice-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.avatar-choice-btn').forEach((b) => b.classList.remove('active'));
       btn.classList.add('active');
       selectedProfilePhoto = btn.getAttribute('data-photo') || '';
-      const preview = document.getElementById('profile-edit-avatar-preview');
-      if (preview) {
+      if (previewAvatar) {
         if (selectedProfilePhoto) {
-          preview.style.backgroundImage = `url('${selectedProfilePhoto}')`;
-          preview.textContent = '';
+          previewAvatar.style.backgroundImage = `url('${selectedProfilePhoto}')`;
+          previewAvatar.textContent = '';
         } else {
-          preview.style.backgroundImage = '';
-          preview.textContent = state.currentUser.avatar;
+          previewAvatar.style.backgroundImage = '';
+          previewAvatar.textContent = state.currentUser.avatar;
         }
+      }
+      if (btnRemovePhoto) {
+        btnRemovePhoto.style.display = selectedProfilePhoto ? 'block' : 'none';
       }
     });
   });
@@ -1051,17 +1193,7 @@ function setupUIEventListeners() {
     const newName = nameInput?.value.trim() || 'Você';
     updateUserProfile(newName, selectedProfilePhoto);
 
-    const headerAvatar = document.getElementById('header-user-avatar');
-    if (headerAvatar) {
-      if (state.currentUser.photo) {
-        headerAvatar.style.backgroundImage = `url('${state.currentUser.photo}')`;
-        headerAvatar.textContent = '';
-      } else {
-        headerAvatar.style.backgroundImage = '';
-        headerAvatar.textContent = state.currentUser.avatar;
-      }
-    }
-
+    updateHeaderProfileUI();
     updateMarkerForMember(state.currentUser);
     renderMembersList();
     closeProfileModal();
@@ -1306,6 +1438,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initMap();
   startGeolocationTracking();
   registerServiceWorker();
+  updateHeaderProfileUI();
   renderMembersList();
   renderPlacesList();
   setupUIEventListeners();

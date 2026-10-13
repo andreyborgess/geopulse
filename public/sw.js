@@ -1,6 +1,6 @@
-// GeoPulse 2.0 - Service Worker v9 (Offline PWA, Map Tile Caching & Web Push APNs/FCM)
-const CACHE_NAME = 'geopulse-app-v9';
-const TILE_CACHE_NAME = 'geopulse-tiles-v5';
+// GeoPulse 2.0 - Service Worker v10 (Offline PWA, Map Tile Caching & Web Push APNs/FCM)
+const CACHE_NAME = 'geopulse-app-v10';
+const TILE_CACHE_NAME = 'geopulse-tiles-v6';
 
 const STATIC_ASSETS = [
   '/',

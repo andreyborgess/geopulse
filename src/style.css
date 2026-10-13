@@ -1279,13 +1279,24 @@ html, body {
 .profile-preview-row {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.profile-avatar-wrap-editable {
+  position: relative;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.profile-avatar-wrap-editable:hover .profile-preview-avatar {
+  border-color: var(--apple-blue);
+  transform: scale(1.03);
 }
 
 .profile-preview-avatar {
-  width: 48px;
-  height: 48px;
+  width: 54px;
+  height: 54px;
   border-radius: 50%;
   background: var(--apple-blue);
   color: #FFFFFF;
@@ -1293,14 +1304,88 @@ html, body {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 16px;
+  font-size: 18px;
   background-size: cover;
+  background-position: center;
+  border: 2px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  transition: all var(--duration-fast) var(--ease-spring);
+}
+
+.btn-avatar-badge-upload {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--apple-blue);
+  color: #FFFFFF;
+  border: 2px solid var(--bg-surface-elevated);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.profile-preview-meta-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .profile-edit-meta {
   display: block;
   font-size: 11.5px;
   color: var(--text-muted);
+}
+
+.photo-upload-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.btn-apple-photo-pick {
+  flex: 1;
+  background: var(--apple-blue-subtle);
+  border: 1px solid rgba(0, 122, 255, 0.35);
+  border-radius: var(--radius-btn);
+  padding: 10px 14px;
+  color: var(--apple-blue);
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.btn-apple-photo-pick:hover {
+  background: var(--apple-blue);
+  color: #FFFFFF;
+  box-shadow: 0 0 16px rgba(0, 122, 255, 0.4);
+}
+
+.btn-apple-photo-remove {
+  background: rgba(255, 59, 48, 0.12);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  border-radius: var(--radius-btn);
+  padding: 10px 12px;
+  color: var(--status-red);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.btn-apple-photo-remove:hover {
+  background: var(--status-red);
+  color: #FFFFFF;
 }
 
 .modal-actions {

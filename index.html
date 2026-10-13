@@ -352,10 +352,18 @@
             </div>
             <div class="modal-body">
               <div class="profile-preview-row">
-                <div class="profile-preview-avatar" id="profile-edit-avatar-preview">VC</div>
-                <div>
+                <div class="profile-avatar-wrap-editable" id="btn-trigger-avatar-click" title="Toque para escolher foto da galeria">
+                  <div class="profile-preview-avatar" id="profile-edit-avatar-preview">VC</div>
+                  <button type="button" class="btn-avatar-badge-upload" id="btn-trigger-badge-click" title="Escolher foto">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="13" height="13">
+                      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                      <circle cx="12" cy="13" r="4"></circle>
+                    </svg>
+                  </button>
+                </div>
+                <div class="profile-preview-meta-col">
                   <strong id="profile-edit-name-preview">Você</strong>
-                  <span class="profile-edit-meta">Aparelho ativo neste navegador</span>
+                  <span class="profile-edit-meta">Toque no avatar ou use a galeria do celular</span>
                 </div>
               </div>
 
@@ -365,11 +373,29 @@
               </div>
 
               <div class="form-group">
-                <label>Foto ou Avatar</label>
-                <div class="avatar-choices-row">
+                <label>Foto do Perfil</label>
+                
+                <!-- Input de arquivo nativo para galeria/câmera do celular -->
+                <input type="file" id="input-profile-photo-file" accept="image/*" style="display: none;" />
+
+                <div class="photo-upload-actions-row">
+                  <button type="button" class="btn-apple-photo-pick" id="btn-pick-from-gallery">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="17" height="17">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                      <polyline points="21 15 16 10 5 21"></polyline>
+                    </svg>
+                    <span>Escolher da Galeria do Celular</span>
+                  </button>
+                  <button type="button" class="btn-apple-photo-remove" id="btn-remove-custom-photo" style="display: none;" title="Remover foto">
+                    <span>Remover</span>
+                  </button>
+                </div>
+
+                <div class="avatar-choices-row" style="margin-top: 10px;">
                   <button type="button" class="avatar-choice-btn active" data-photo="">VC (Monograma)</button>
-                  <button type="button" class="avatar-choice-btn" data-photo="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80">Foto 1</button>
-                  <button type="button" class="avatar-choice-btn" data-photo="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80">Foto 2</button>
+                  <button type="button" class="avatar-choice-btn" data-photo="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80">Avatar 1</button>
+                  <button type="button" class="avatar-choice-btn" data-photo="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80">Avatar 2</button>
                 </div>
               </div>
 
