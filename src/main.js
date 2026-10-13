@@ -378,6 +378,9 @@ function updateCurrentUserPosition(lat, lng, accuracy = 10, speedKmH = 0) {
   renderMembersList();
   renderPlacesList();
   broadcastUserUpdate(state.currentUser);
+  if (p2pEngine) {
+    p2pEngine.broadcastPosition(state.currentUser);
+  }
   checkActivePlaces();
 }
 
@@ -467,7 +470,7 @@ function renderMembersList() {
 
   const allMembers = [state.currentUser, ...Array.from(state.members.values())];
 
-  container.innerHTML = allMembers
+  const membersCardsHtml = allMembers
     .map((member) => {
       const isMe = member.isMe;
       const avatarText = member.avatar || member.name.slice(0, 2).toUpperCase();
@@ -512,6 +515,29 @@ function renderMembersList() {
       `;
     })
     .join('');
+
+  const emptyCardHtml = state.members.size === 0 ? `
+    <div class="empty-members-card" id="card-empty-invite" title="Conectar outro celular">
+      <div class="empty-members-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </div>
+      <div class="empty-members-text">
+        <strong>Conectar Novo Aparelho</strong>
+        <span>Toque para gerar o QR Code e conectar o celular da família em tempo real.</span>
+      </div>
+    </div>
+  ` : '';
+
+  container.innerHTML = membersCardsHtml + emptyCardHtml;
+
+  // Evento de clique no card vazio para convidar
+  document.getElementById('card-empty-invite')?.addEventListener('click', () => {
+    playTactileClick();
+    openShareModal();
+  });
 
   // Evento de clique para abrir a ficha de detalhes
   container.querySelectorAll('.member-card').forEach((card) => {
@@ -783,18 +809,40 @@ function closePlaceModal() {
 }
 
 /* =========================================================
-   MODAL COMPARTILHAR CÍRCULO
+   MODAL COMPARTILHAR CÍRCULO & QR CODE REAL
 ========================================================= */
-function openShareModal() {
+async function openShareModal() {
   playTactileClick();
   const modal = document.getElementById('modal-share');
   const linkInput = document.getElementById('share-link-input');
   const qrContainer = document.getElementById('qr-container');
+  const modalCircleCode = document.getElementById('modal-circle-code');
 
-  const peerParam = p2pEngine ? `&peer=${p2pEngine.getMyPeerId()}` : '';
-  const inviteUrl = `${window.location.origin}${window.location.pathname}?circle=${state.circleId}${peerParam}`;
+  if (modalCircleCode) {
+    modalCircleCode.textContent = state.circleId;
+  }
+
+  // Se o usuário estiver no localhost, usa a URL oficial de produção na Vercel
+  // para que o QR Code lido pela câmera de outro celular funcione imediatamente!
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const baseUrl = isLocal ? 'https://loc-sigma-mauve.vercel.app' : window.location.origin;
+
+  const peerParam = p2pEngine ? `&peer=${encodeURIComponent(p2pEngine.getMyPeerId())}` : '';
+  const inviteUrl = `${baseUrl}/?circle=${encodeURIComponent(state.circleId)}${peerParam}&join=1`;
+
   if (linkInput) linkInput.value = inviteUrl;
-  if (qrContainer) qrContainer.innerHTML = generateQRCodeSVG(inviteUrl);
+
+  if (qrContainer) {
+    qrContainer.innerHTML = '<div style="padding: 24px; font-size: 13px; color: var(--text-muted); text-align: center;">Gerando QR Code oficial...</div>';
+    try {
+      const svg = await generateQRCodeSVG(inviteUrl);
+      qrContainer.innerHTML = svg;
+    } catch (err) {
+      console.error('Falha ao renderizar QR Code:', err);
+      qrContainer.innerHTML = `<div style="color: #ff3b30; font-size: 12px; padding: 16px;">Erro: ${err.message}</div>`;
+    }
+  }
+
   if (modal) modal.style.display = 'flex';
 }
 
@@ -802,6 +850,91 @@ function closeShareModal() {
   playTactileClick();
   const modal = document.getElementById('modal-share');
   if (modal) modal.style.display = 'none';
+}
+
+/* =========================================================
+   INSTALAÇÃO PWA DIRETA NO CELULAR (ANDROID / IPHONE)
+========================================================= */
+let deferredPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const nativeBox = document.getElementById('pwa-native-install-box');
+  if (nativeBox) nativeBox.style.display = 'block';
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const nativeBox = document.getElementById('pwa-native-install-box');
+  if (nativeBox) nativeBox.style.display = 'none';
+  showToast('GeoPulse instalado com sucesso no seu celular!', 'info');
+  closeInstallPWAModal();
+});
+
+async function triggerPWAInstall() {
+  playTactileClick();
+  if (deferredPrompt) {
+    try {
+      deferredPrompt.prompt();
+      const choice = await deferredPrompt.userChoice;
+      if (choice.outcome === 'accepted') {
+        showToast('Instalando GeoPulse...', 'info');
+      }
+      deferredPrompt = null;
+      const nativeBox = document.getElementById('pwa-native-install-box');
+      if (nativeBox) nativeBox.style.display = 'none';
+    } catch (e) {
+      console.error('Erro no prompt de instalação:', e);
+    }
+  } else if (isIOS()) {
+    showToast('No Safari: Toque no botão Compartilhar e depois em "Adicionar à Tela de Início".', 'info');
+  } else {
+    showToast('Toque no menu (⋮) do seu navegador e selecione "Instalar aplicativo" ou "Adicionar à tela inicial".', 'info');
+  }
+}
+
+function openInstallPWAModal(isDirectInvite = false) {
+  playTactileClick();
+  const modal = document.getElementById('modal-install-pwa');
+  const circleTitle = document.getElementById('pwa-circle-title');
+  const nativeBox = document.getElementById('pwa-native-install-box');
+  const iosBox = document.getElementById('pwa-ios-guide-box');
+
+  if (circleTitle) {
+    circleTitle.textContent = isDirectInvite
+      ? `Você foi conectado ao Círculo "${state.circleId}"!`
+      : 'Instale o GeoPulse no seu Celular';
+  }
+
+  if (isIOS()) {
+    if (nativeBox) nativeBox.style.display = 'none';
+    if (iosBox) iosBox.style.display = 'flex';
+  } else {
+    if (nativeBox) nativeBox.style.display = 'block';
+    if (iosBox) iosBox.style.display = deferredPrompt ? 'none' : 'flex';
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeInstallPWAModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-install-pwa');
+  if (modal) modal.style.display = 'none';
+}
+
+function checkAutoOpenPWAInstall() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isJoin = urlParams.get('join') === '1' || urlParams.has('peer');
+
+  // Se o usuário veio de um escaneamento do QR Code e ainda não está em modo PWA nativo instalado
+  if (isJoin && !isStandalone()) {
+    setTimeout(() => {
+      openInstallPWAModal(true);
+      showToast(`Conectado ao círculo! Instale como aplicativo para manter conexão contínua.`, 'info');
+    }, 800);
+  }
 }
 
 /* =========================================================
@@ -1074,16 +1207,12 @@ function setupUIEventListeners() {
     }
   });
 
-  // Restaurar demonstração / Conectar novo
+  // Conectar novo aparelho / Guia de Instalação PWA
   document.getElementById('btn-invite-flow')?.addEventListener('click', openShareModal);
-  document.getElementById('btn-reset-demo')?.addEventListener('click', () => {
-    playTactileClick();
-    resetToDemoMembers();
-    updateAllMarkers();
-    renderMembersList();
-    renderPlacesList();
-    showToast('Familiares de demonstração restaurados.', 'info');
-  });
+  document.getElementById('btn-open-install-guide')?.addEventListener('click', () => openInstallPWAModal(false));
+  document.getElementById('btn-close-install-modal')?.addEventListener('click', closeInstallPWAModal);
+  document.getElementById('btn-continue-in-browser')?.addEventListener('click', closeInstallPWAModal);
+  document.getElementById('btn-trigger-pwa-install')?.addEventListener('click', triggerPWAInstall);
 
   // Abertura e fechamento de Modais
   document.getElementById('btn-share-circle')?.addEventListener('click', openShareModal);
@@ -1445,4 +1574,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initCrossTabSync();
   initP2P();
   updateNotificationUI();
+  checkAutoOpenPWAInstall();
 });

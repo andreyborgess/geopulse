@@ -234,8 +234,12 @@
                 </svg>
                 <span>Conectar Novo Aparelho</span>
               </button>
-              <button class="btn-subtle-link text-muted" id="btn-reset-demo">
-                <span>Restaurar Demonstração</span>
+              <button class="btn-subtle-link text-accent" id="btn-open-install-guide">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                  <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                </svg>
+                <span>Instalar App no Celular</span>
               </button>
             </div>
           </div>
@@ -614,6 +618,63 @@
                 </div>
               </div>
 
+            </div>
+          </div>
+        </div>
+      <!-- MODAL CONVITE & INSTALAÇÃO PWA NO CELULAR -->
+      <div class="modal-backdrop" id="modal-install-pwa" style="display: none;">
+        <div class="modal-card-shell">
+          <div class="modal-card-core">
+            <div class="modal-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow">CONECTAR AO CÍRCULO</span>
+                <h3 id="install-pwa-title">Instalar App no Celular</h3>
+              </div>
+              <button class="modal-close" id="btn-close-install-modal" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div class="pwa-invite-card">
+                <div class="pwa-app-icon-wrap">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2" width="28" height="28">
+                    <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+                  </svg>
+                </div>
+                <div class="pwa-invite-text">
+                  <strong id="pwa-circle-title">Você foi convidado para o Círculo!</strong>
+                  <span>Instale o GeoPulse no celular para acompanhar sua família e transmitir sua localização com precisão.</span>
+                </div>
+              </div>
+
+              <!-- Botão 1 Clique para Android / Chrome / PWA nativo -->
+              <div class="pwa-action-box" id="pwa-native-install-box" style="display: none; margin-bottom: 12px;">
+                <button class="btn-apple-action primary" id="btn-trigger-pwa-install" style="width: 100%; padding: 12px;">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+                    <line x1="12" y1="18" x2="12.01" y2="18"></line>
+                  </svg>
+                  <span>📲 Instalar GeoPulse no Celular</span>
+                </button>
+              </div>
+
+              <!-- Instruções Visuais Passo a Passo para iPhone (iOS Safari) -->
+              <div class="pwa-ios-guide" id="pwa-ios-guide-box">
+                <div class="ios-guide-step">
+                  <span class="step-num">1</span>
+                  <span>No Safari, toque no botão <strong>Compartilhar</strong> (ícone quadrado com seta <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align: -2px;"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg> no rodapé).</span>
+                </div>
+                <div class="ios-guide-step">
+                  <span class="step-num">2</span>
+                  <span>Role para baixo e toque em <strong>"Adicionar à Tela de Início"</strong> ➕</span>
+                </div>
+                <div class="ios-guide-step">
+                  <span class="step-num">3</span>
+                  <span>Toque em <strong>Adicionar</strong> no canto superior direito para finalizar!</span>
+                </div>
+              </div>
+
+              <div class="modal-actions" style="margin-top: 14px;">
+                <button class="btn-apple-action secondary" id="btn-continue-in-browser">Continuar no Navegador</button>
+              </div>
             </div>
           </div>
         </div>

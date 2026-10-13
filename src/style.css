@@ -1395,6 +1395,218 @@ html, body {
   margin-top: 18px;
 }
 
+/* =========================================================
+   COMPARTILHAMENTO QR CODE & CONVITE PWA
+========================================================= */
+.qr-preview-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0 16px 0;
+  gap: 10px;
+}
+
+#qr-container {
+  width: 220px;
+  height: 220px;
+  background: #FFFFFF;
+  border-radius: 20px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#qr-container svg {
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+  border-radius: 10px;
+}
+
+.qr-hint {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: center;
+}
+
+.circle-code-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-subtle);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+
+.code-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.code-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.08em;
+}
+
+.code-val {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--apple-blue);
+  letter-spacing: 0.05em;
+}
+
+.share-link-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-link-row input {
+  flex: 1;
+  background: var(--bg-subtle);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-btn);
+  padding: 9px 12px;
+  color: var(--text-main);
+  font-size: 12px;
+  font-family: var(--font-mono);
+  outline: none;
+}
+
+/* =========================================================
+   GUIA E INSTALAÇÃO PWA NO CELULAR
+========================================================= */
+.pwa-invite-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--bg-subtle);
+  border: 1px solid rgba(0, 122, 255, 0.28);
+  border-radius: var(--radius-card);
+  padding: 14px;
+  margin-bottom: 14px;
+}
+
+.pwa-app-icon-wrap {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--apple-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 122, 255, 0.35);
+  flex-shrink: 0;
+}
+
+.pwa-invite-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pwa-invite-text strong {
+  font-size: 14px;
+  color: var(--text-main);
+}
+
+.pwa-invite-text span {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.pwa-ios-guide {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-card);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ios-guide-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--text-body);
+  line-height: 1.4;
+}
+
+.ios-guide-step .step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--apple-blue);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Card Vazio de Membros no Sheet */
+.empty-members-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-card);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+}
+
+.empty-members-card:hover {
+  background: rgba(0, 122, 255, 0.08);
+  border-color: var(--apple-blue);
+}
+
+.empty-members-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--apple-blue-subtle);
+  color: var(--apple-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.empty-members-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.empty-members-text strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.empty-members-text span {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
 /* Modal SOS */
 .sos-header {
   border-bottom-color: rgba(255, 59, 48, 0.2);

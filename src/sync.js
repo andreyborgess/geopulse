@@ -165,27 +165,37 @@ export const state = {
   activeRoute: null,
 };
 
-// Inicializa membros e lugares salvos (carrega do storage ou carrega demos autênticos)
+// Inicializa membros e lugares salvos (somente aparelhos reais conectados)
 export function initAppState() {
   // Salva ID persistente de usuário
   localStorage.setItem('geopulse_user_id', state.currentUser.id);
 
-  // Inicializa Membros
+  // Lê círculo da URL se fornecido (convite)
+  if (typeof window !== 'undefined' && window.location.search) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const circleParam = urlParams.get('circle');
+    if (circleParam) {
+      state.circleId = circleParam;
+      localStorage.setItem('geopulse_circle_id', circleParam);
+    }
+  }
+
+  // Inicializa Membros (Remove qualquer membro demo antigo)
   const savedMembersJson = localStorage.getItem('geopulse_members_data');
   if (savedMembersJson) {
     try {
       const parsed = JSON.parse(savedMembersJson);
-      parsed.forEach((m) => state.members.set(m.id, m));
+      parsed.forEach((m) => {
+        // Ignora qualquer membro demo
+        if (!m.isDemo && !m.id.startsWith('member_')) {
+          state.members.set(m.id, m);
+        }
+      });
     } catch (e) {}
   }
 
-  // Se não houver nenhum membro salvo, popula com os familiares de demonstração
-  if (state.members.size === 0) {
-    DEFAULT_DEMO_MEMBERS.forEach((m) => {
-      state.members.set(m.id, { ...m });
-    });
-    saveMembersToStorage();
-  }
+  // Salva lista limpa de membros reais no storage
+  saveMembersToStorage();
 
   // Inicializa Lugares Salvos
   const savedPlacesJson = localStorage.getItem('geopulse_saved_places');
