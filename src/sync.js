@@ -165,6 +165,40 @@ export const state = {
   activeRoute: null,
 };
 
+// Verifica se o usuário já completou o onboarding/identificação neste aparelho
+export function isOnboarded() {
+  return localStorage.getItem('geopulse_onboarded') === 'true';
+}
+
+// Salva e persiste os dados do perfil do usuário
+export function saveUserProfile({ name, relation, color, photo, avatar }) {
+  if (name) {
+    state.currentUser.name = name;
+    localStorage.setItem('geopulse_user_name', name);
+  }
+  if (relation) {
+    state.currentUser.relation = relation;
+    localStorage.setItem('geopulse_user_relation', relation);
+  }
+  if (color) {
+    state.currentUser.color = color;
+    localStorage.setItem('geopulse_user_color', color);
+  }
+  if (photo !== undefined) {
+    state.currentUser.photo = photo;
+    localStorage.setItem('geopulse_user_photo', photo);
+  }
+  if (avatar) {
+    state.currentUser.avatar = avatar;
+    localStorage.setItem('geopulse_user_avatar', avatar);
+  } else if (name) {
+    const initials = name.trim().split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase() || 'VC';
+    state.currentUser.avatar = initials;
+    localStorage.setItem('geopulse_user_avatar', initials);
+  }
+  localStorage.setItem('geopulse_onboarded', 'true');
+}
+
 // Inicializa membros e lugares salvos (somente aparelhos reais conectados)
 export function initAppState() {
   // Salva ID persistente de usuário
@@ -177,6 +211,10 @@ export function initAppState() {
     if (circleParam) {
       state.circleId = circleParam;
       localStorage.setItem('geopulse_circle_id', circleParam);
+    }
+    if (urlParams.get('join') === '1' && !isOnboarded()) {
+      state.currentUser.relation = 'Membro Convidado';
+      state.currentUser.role = 'Membro';
     }
   }
 

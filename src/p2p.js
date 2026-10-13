@@ -1,5 +1,6 @@
 // Módulo WebRTC P2P de Rastreamento Direto em Tempo Real com PeerJS
 import { Peer } from 'peerjs';
+import mqtt from 'mqtt';
 import { state, saveMembersToStorage } from './sync.js';
 
 let peerInstance = null;

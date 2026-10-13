@@ -621,6 +621,97 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- MODAL ENTRAR COMO NOVO NO SISTEMA (ONBOARDING DE CONVIDADO / APARELHO) -->
+      <div class="modal-backdrop" id="modal-onboarding" style="display: none;">
+        <div class="modal-card-shell">
+          <div class="modal-card-core">
+            <div class="modal-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow">CONVITE DE LOCALIZAÇÃO</span>
+                <h3 id="onboarding-modal-title">Entrar no Círculo Familiar</h3>
+              </div>
+              <button class="modal-close" id="btn-close-onboarding" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p class="modal-desc">
+                Você foi convidado para o Círculo <strong id="onboarding-circle-name" style="color: var(--apple-blue);">FAMILIA-01</strong>. Como você quer ser identificado neste aparelho?
+              </p>
+
+              <!-- Avatar / Foto do Convidado -->
+              <div class="profile-avatar-customizer" style="margin-bottom: 16px;">
+                <div class="profile-avatar-preview-box" id="onboarding-avatar-preview" style="background-color: #34C759;">
+                  <span id="onboarding-avatar-initials">📱</span>
+                </div>
+                <div class="avatar-controls">
+                  <span class="field-label" style="margin: 0;">Foto ou Ícone do Celular</span>
+                  <div class="avatar-buttons-row">
+                    <button type="button" class="btn-apple-action secondary btn-sm" id="btn-onboarding-pick-photo">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                        <circle cx="12" cy="13" r="4"></circle>
+                      </svg>
+                      <span>Escolher da Galeria</span>
+                    </button>
+                    <button type="button" class="btn-apple-action secondary btn-sm text-danger" id="btn-onboarding-remove-photo" style="display: none;">
+                      <span>Remover</span>
+                    </button>
+                  </div>
+                  <input type="file" id="input-onboarding-photo" accept="image/*" style="display: none;" />
+                </div>
+              </div>
+
+              <!-- Nome ou Aparelho -->
+              <div class="form-group">
+                <label class="field-label" for="input-onboarding-name">Seu Nome ou Nome deste Celular *</label>
+                <input
+                  type="text"
+                  id="input-onboarding-name"
+                  class="apple-input"
+                  placeholder="Ex: Pedro, iPhone da Maria, Samsung do Pai..."
+                  maxlength="28"
+                  required
+                />
+              </div>
+
+              <!-- Grau de Parentesco -->
+              <div class="form-group">
+                <label class="field-label" for="select-onboarding-relation">Grau de Parentesco / Relação</label>
+                <select id="select-onboarding-relation" class="apple-input">
+                  <option value="Filho(a)">Filho(a)</option>
+                  <option value="Mãe">Mãe</option>
+                  <option value="Pai">Pai</option>
+                  <option value="Irmão(ã)">Irmão(ã)</option>
+                  <option value="Cônjuge">Cônjuge</option>
+                  <option value="Amigo(a)">Amigo(a)</option>
+                  <option value="Aparelho">Aparelho / Dispositivo</option>
+                </select>
+              </div>
+
+              <!-- Paleta de Cores do Marcador -->
+              <div class="form-group">
+                <label class="field-label">Cor do seu Marcador no Mapa</label>
+                <div class="color-palette-row" id="onboarding-color-palette">
+                  <button type="button" class="color-chip-btn active" data-color="#007AFF" style="background-color: #007AFF;" title="Azul"></button>
+                  <button type="button" class="color-chip-btn" data-color="#34C759" style="background-color: #34C759;" title="Verde"></button>
+                  <button type="button" class="color-chip-btn" data-color="#FF9500" style="background-color: #FF9500;" title="Laranja"></button>
+                  <button type="button" class="color-chip-btn" data-color="#EC4899" style="background-color: #EC4899;" title="Rosa"></button>
+                  <button type="button" class="color-chip-btn" data-color="#AF52DE" style="background-color: #AF52DE;" title="Roxo"></button>
+                  <button type="button" class="color-chip-btn" data-color="#5856D6" style="background-color: #5856D6;" title="Índigo"></button>
+                </div>
+              </div>
+
+              <div class="modal-actions" style="margin-top: 20px;">
+                <button type="button" class="btn-apple-action primary" id="btn-submit-onboarding" style="width: 100%; padding: 13px;">
+                  <span>Entrar no Círculo & Compartilhar GPS</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- MODAL CONVITE & INSTALAÇÃO PWA NO CELULAR -->
       <div class="modal-backdrop" id="modal-install-pwa" style="display: none;">
         <div class="modal-card-shell">
