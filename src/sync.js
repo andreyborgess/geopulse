@@ -19,14 +19,129 @@ try {
   // ignore
 }
 
+// Estado inicial de Lugares Salvos (Padrão Família)
+export const DEFAULT_SAVED_PLACES = [
+  {
+    id: 'place_casa',
+    name: 'Casa da Família',
+    category: 'home',
+    icon: '🏠',
+    lat: -3.1025,
+    lng: -60.0142,
+    radius: 250,
+    color: '#007AFF',
+    address: 'Adrianópolis, Manaus',
+  },
+  {
+    id: 'place_trabalho',
+    name: 'Trabalho / Centro',
+    category: 'work',
+    icon: '💼',
+    lat: -3.1310,
+    lng: -60.0240,
+    radius: 200,
+    color: '#5856D6',
+    address: 'Centro, Manaus',
+  },
+  {
+    id: 'place_escola',
+    name: 'Faculdade / Campus',
+    category: 'school',
+    icon: '🎓',
+    lat: -3.0990,
+    lng: -59.9880,
+    radius: 350,
+    color: '#34C759',
+    address: 'Coroado, Manaus',
+  },
+];
+
+// Estado inicial de Membros de Demonstração (Realistas e Orgânicos)
+export const DEFAULT_DEMO_MEMBERS = [
+  {
+    id: 'member_mariana',
+    name: 'Mariana Silva',
+    relation: 'Esposa',
+    lat: -3.1025,
+    lng: -60.0142,
+    accuracy: 12,
+    speed: 0,
+    heading: 0,
+    battery: 88,
+    charging: false,
+    color: '#EC4899',
+    avatar: 'MS',
+    photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    activity: '🏠 Em Casa',
+    address: 'Adrianópolis, Manaus',
+    updatedAt: Date.now() - 1000 * 60 * 4,
+    history: [
+      { lat: -3.1030, lng: -60.0145, time: Date.now() - 1000 * 60 * 30 },
+      { lat: -3.1025, lng: -60.0142, time: Date.now() - 1000 * 60 * 4 },
+    ],
+    isMe: false,
+    isDemo: true,
+  },
+  {
+    id: 'member_lucas',
+    name: 'Lucas Silva',
+    relation: 'Filho',
+    lat: -3.0950,
+    lng: -60.0280,
+    accuracy: 18,
+    speed: 44,
+    heading: 185,
+    battery: 62,
+    charging: false,
+    color: '#007AFF',
+    avatar: 'LS',
+    photo: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
+    activity: '🚗 Dirigindo · 44 km/h',
+    address: 'Av. Djalma Batista, Manaus',
+    updatedAt: Date.now() - 1000 * 35,
+    history: [
+      { lat: -3.0880, lng: -60.0270, time: Date.now() - 1000 * 60 * 10 },
+      { lat: -3.0920, lng: -60.0275, time: Date.now() - 1000 * 60 * 4 },
+      { lat: -3.0950, lng: -60.0280, time: Date.now() - 1000 * 35 },
+    ],
+    isMe: false,
+    isDemo: true,
+  },
+  {
+    id: 'member_carlos',
+    name: 'Carlos Mendes',
+    relation: 'Irmão',
+    lat: -3.0990,
+    lng: -59.9880,
+    accuracy: 15,
+    speed: 0,
+    heading: 45,
+    battery: 95,
+    charging: true,
+    color: '#34C759',
+    avatar: 'CM',
+    photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    activity: '🎓 Na Faculdade',
+    address: 'Setor Sul / UFAM, Manaus',
+    updatedAt: Date.now() - 1000 * 60 * 12,
+    history: [
+      { lat: -3.0995, lng: -59.9885, time: Date.now() - 1000 * 60 * 20 },
+      { lat: -3.0990, lng: -59.9880, time: Date.now() - 1000 * 60 * 12 },
+    ],
+    isMe: false,
+    isDemo: true,
+  },
+];
+
 // Estado dos membros do círculo
 export const state = {
-  circleId: localStorage.getItem('geopulse_circle_id') || 'RADAR-01',
-  circleName: localStorage.getItem('geopulse_circle_name') || 'Meu Círculo',
+  circleId: localStorage.getItem('geopulse_circle_id') || 'FAMILIA-01',
+  circleName: localStorage.getItem('geopulse_circle_name') || 'Família Silva',
   currentUser: {
     id: localStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).substr(2, 6)}`,
-    name: localStorage.getItem('geopulse_user_name') || 'Você (Atual)',
-    role: 'Comando Central',
+    name: localStorage.getItem('geopulse_user_name') || 'Você',
+    relation: 'Organizador',
+    role: 'Administrador',
     lat: -3.1303, // Manaus, Amazonas (Teatro Amazonas / Centro)
     lng: -60.0234,
     accuracy: 10,
@@ -36,17 +151,64 @@ export const state = {
     charging: false,
     updatedAt: Date.now(),
     history: [],
-    color: '#00F0FF', // Ciano vibrante de radar tático
-    avatar: 'VC',
+    color: '#007AFF', // Azul Real Apple
+    avatar: localStorage.getItem('geopulse_user_avatar') || 'VC',
+    photo: localStorage.getItem('geopulse_user_photo') || '',
+    activity: '📍 Parado',
+    address: 'Centro, Manaus',
     isMe: true,
     sos: false,
   },
-  // Nenhum membro fantasma cadastrado previamente - inicia limpo!
   members: new Map(),
-  // Nenhuma cerca pré-cadastrada - inicia limpo para o usuário cadastrar apenas o que quiser!
   geofences: [],
-  simulationActive: false,
+  selectedMemberId: null,
+  activeRoute: null,
 };
+
+// Inicializa membros e lugares salvos (carrega do storage ou carrega demos autênticos)
+export function initAppState() {
+  // Salva ID persistente de usuário
+  localStorage.setItem('geopulse_user_id', state.currentUser.id);
+
+  // Inicializa Membros
+  const savedMembersJson = localStorage.getItem('geopulse_members_data');
+  if (savedMembersJson) {
+    try {
+      const parsed = JSON.parse(savedMembersJson);
+      parsed.forEach((m) => state.members.set(m.id, m));
+    } catch (e) {}
+  }
+
+  // Se não houver nenhum membro salvo, popula com os familiares de demonstração
+  if (state.members.size === 0) {
+    DEFAULT_DEMO_MEMBERS.forEach((m) => {
+      state.members.set(m.id, { ...m });
+    });
+    saveMembersToStorage();
+  }
+
+  // Inicializa Lugares Salvos
+  const savedPlacesJson = localStorage.getItem('geopulse_saved_places');
+  if (savedPlacesJson) {
+    try {
+      state.geofences = JSON.parse(savedPlacesJson);
+    } catch (e) {
+      state.geofences = [...DEFAULT_SAVED_PLACES];
+    }
+  } else {
+    state.geofences = [...DEFAULT_SAVED_PLACES];
+    localStorage.setItem('geopulse_saved_places', JSON.stringify(state.geofences));
+  }
+}
+
+export function saveMembersToStorage() {
+  const membersArray = Array.from(state.members.values());
+  localStorage.setItem('geopulse_members_data', JSON.stringify(membersArray));
+}
+
+export function savePlacesToStorage() {
+  localStorage.setItem('geopulse_saved_places', JSON.stringify(state.geofences));
+}
 
 // Salva ID persistente de usuário
 localStorage.setItem('geopulse_user_id', state.currentUser.id);
@@ -168,4 +330,66 @@ export function removeMember(id) {
  */
 export function clearAllMembers() {
   state.members.clear();
+  saveMembersToStorage();
 }
+
+/**
+ * Restaura os membros familiares de demonstração
+ */
+export function resetToDemoMembers() {
+  state.members.clear();
+  DEFAULT_DEMO_MEMBERS.forEach((m) => {
+    state.members.set(m.id, { ...m, updatedAt: Date.now() });
+  });
+  saveMembersToStorage();
+}
+
+/**
+ * Remove apenas membros de demonstração, mantendo aparelhos reais
+ */
+export function clearDemoMembers() {
+  Array.from(state.members.entries()).forEach(([id, m]) => {
+    if (m.isDemo) {
+      state.members.delete(id);
+    }
+  });
+  saveMembersToStorage();
+}
+
+/**
+ * Atualiza o perfil do próprio usuário
+ */
+export function updateUserProfile(name, photo = '') {
+  state.currentUser.name = name.trim() || 'Você';
+  state.currentUser.photo = photo;
+  const initials = state.currentUser.name
+    .split(' ')
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join('');
+  state.currentUser.avatar = initials || 'VC';
+
+  localStorage.setItem('geopulse_user_name', state.currentUser.name);
+  localStorage.setItem('geopulse_user_photo', state.currentUser.photo);
+  localStorage.setItem('geopulse_user_avatar', state.currentUser.avatar);
+
+  broadcastUserUpdate(state.currentUser);
+}
+
+/**
+ * Adiciona um novo Lugar Salvo (Casa, Trabalho, Escola, etc.)
+ */
+export function addSavedPlace(place) {
+  state.geofences.push(place);
+  savePlacesToStorage();
+  return place;
+}
+
+/**
+ * Remove um Lugar Salvo por ID
+ */
+export function removeSavedPlace(id) {
+  state.geofences = state.geofences.filter((g) => g.id !== id);
+  savePlacesToStorage();
+}
+

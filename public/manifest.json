@@ -4,8 +4,8 @@
   "description": "Aplicativo de rastreamento de localização e círculos em tempo real",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#090d16",
-  "theme_color": "#0ea5e9",
+  "background_color": "#070A11",
+  "theme_color": "#070A11",
   "icons": [
     {
       "src": "/icon.svg",

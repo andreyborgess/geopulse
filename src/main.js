@@ -1,4 +1,5 @@
 import './style.css';
+import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import {
   playTactileClick,
@@ -15,15 +16,36 @@ import {
 } from './geo.js';
 import {
   state,
+  initAppState,
   broadcastUserUpdate,
   listenToBroadcasts,
   addCustomMember,
   removeMember,
   clearAllMembers,
+  resetToDemoMembers,
+  clearDemoMembers,
+  updateUserProfile,
+  addSavedPlace,
+  removeSavedPlace,
+  saveMembersToStorage,
+  savePlacesToStorage,
 } from './sync.js';
 import { checkGeofences } from './geofence.js';
 import { generateQRCodeSVG } from './qrcode.js';
 import { initP2PNetwork, enableScreenWakeLock } from './p2p.js';
+import {
+  isPushSupported,
+  isIOS,
+  isStandalone,
+  getPermissionStatus,
+  getOrRegisterSubscription,
+  requestPushPermission,
+  triggerTestPushNotification,
+  notifySOSAlert,
+  notifyGeofenceEvent,
+  getNotificationPreferences,
+  saveNotificationPreferences,
+} from './notifications.js';
 
 // Coordenadas Centrais de Manaus, Amazonas (Teatro Amazonas / Centro)
 export const MANAUS_COORDS = {
@@ -36,63 +58,29 @@ export const MANAUS_COORDS = {
 ========================================================= */
 let map = null;
 let currentTileLayer = null;
-let showTrails = true;
-let isFirstGpsFix = true;
 let activeFocusedMemberId = null;
-let locationMode = 'gps'; // 'gps' por padrão para rastreamento ativo em tempo real do celular
-let autoFollowUser = true; // Mantém o mapa acompanhando o deslocamento do celular
+let autoFollowUser = true;
 let p2pEngine = null;
 let gpsWatchId = null;
 let lastGeocodedAddressCoords = null;
 let lastGeocodedAddressTime = 0;
+let lastFollowCoords = null;
+let activeRoutePolyline = null;
 
 const markersMap = new Map();
-const trailsMap = new Map();
-const geofencesMap = new Map();
+const placeCirclesMap = new Map();
+const placeMarkersMap = new Map();
 let userAccuracyCircle = null;
 
-// Provedores de Tiles 100% Livres de Watermark e sem exigência de API Key
+// Provedores de Tiles 100% Livres de API Key e Rate Limits
 const TILE_LAYERS = {
-  // Modo Minimalista Editorial com Esri Canvas World Light Gray
-  minimal: L.layerGroup([
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-      {
-        maxZoom: 16,
-        attribution: 'Tiles &copy; Esri',
-      }
-    ),
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-      {
-        maxZoom: 16,
-        attribution: 'Tiles &copy; Esri',
-      }
-    ),
-  ]),
-  // Modo Ruas oficial do OpenStreetMap
-  streets: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  // Modo Escuro Sofisticado (Filtro Dark Apple)
+  dark: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
+    className: 'dark-map-tiles',
     attribution: '&copy; OpenStreetMap contributors',
   }),
-  // Modo Noturno Tático com Esri Dark Gray
-  dark: L.layerGroup([
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
-      {
-        maxZoom: 16,
-        attribution: 'Tiles &copy; Esri',
-      }
-    ),
-    L.tileLayer(
-      'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
-      {
-        maxZoom: 16,
-        attribution: 'Tiles &copy; Esri',
-      }
-    ),
-  ]),
-  // Modo Satélite de alta resolução da Esri
+  // Modo Satélite Esri de Alta Resolução
   satellite: L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
     {
@@ -100,830 +88,309 @@ const TILE_LAYERS = {
       attribution: 'Tiles &copy; Esri',
     }
   ),
+  // Modo Ruas Natural
+  streets: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }),
 };
 
 /* =========================================================
-   INICIALIZAÇÃO DO MAPA (COM SUPORTE OFFLINE)
+   INICIALIZAÇÃO DO MAPA LEAFLET
 ========================================================= */
-// Restaura última posição real do aparelho para carregamento offline instantâneo
-try {
-  const savedPos = localStorage.getItem('geopulse_last_known_pos');
-  if (savedPos) {
-    const parsed = JSON.parse(savedPos);
-    if (parsed.lat && parsed.lng) {
-      state.currentUser.lat = parsed.lat;
-      state.currentUser.lng = parsed.lng;
-      state.currentUser.accuracy = parsed.accuracy || 10;
-    }
-  }
-} catch (e) {
-  // ignore
-}
-
 function initMap() {
-  const initialLat = state.currentUser.lat || MANAUS_COORDS.lat;
-  const initialLng = state.currentUser.lng || MANAUS_COORDS.lng;
+  const mapElement = document.getElementById('map');
+  if (!mapElement) return;
 
   map = L.map('map', {
-    center: [initialLat, initialLng],
+    center: [state.currentUser.lat, state.currentUser.lng],
     zoom: 15,
     zoomControl: false,
     attributionControl: false,
   });
 
-  // Camada padrão: Modo Noturno Tático (Esri Dark Gray - Rio Negro e Vias em Alta Definição)
   currentTileLayer = TILE_LAYERS.dark;
   currentTileLayer.addTo(map);
 
-  // Círculo de precisão de radar ciano de alta visibilidade
-  userAccuracyCircle = L.circle([initialLat, initialLng], {
-    radius: state.currentUser.accuracy || 10,
-    color: '#00F0FF',
-    fillColor: '#00F0FF',
-    fillOpacity: 0.1,
-    weight: 1.5,
-    dashArray: '4, 4',
-  }).addTo(map);
-
-  // O ponteiro do usuário é 100% atrelado ao GPS real. Clicar no mapa NÃO move o usuário.
-
-  // Quando o mapa é arrastado manualmente pelo usuário, pausa o acompanhamento suave
+  // Desativa recentralização automática se o usuário arrastar o mapa manualmente
   map.on('dragstart', () => {
-    if (autoFollowUser) {
-      autoFollowUser = false;
-      const recenterBtn = document.getElementById('btn-recenter-floating');
-      if (recenterBtn) {
-        const lbl = document.getElementById('recenter-label');
-        if (lbl) lbl.textContent = locationMode === 'gps' ? 'Seguir Meu GPS' : 'Voltar ao GPS';
-        recenterBtn.style.display = 'inline-flex';
-      }
-    }
+    autoFollowUser = false;
+    const recenterBtn = document.getElementById('btn-recenter-floating');
+    if (recenterBtn) recenterBtn.classList.remove('active-gps');
   });
 
-  // Handler para exclusão de ponto via popup no mapa
-  map.on('popupopen', (e) => {
-    const el = e.popup.getElement();
-    if (el) {
-      const deleteBtn = el.querySelector('[data-popup-delete]');
-      if (deleteBtn) {
-        deleteBtn.onclick = () => {
-          const id = deleteBtn.getAttribute('data-popup-delete');
-          map.closePopup();
-          deleteMemberById(id);
-        };
-      }
-    }
-  });
-
-  // Renderiza cercas (inicia vazio se não houver cadastros)
-  renderGeofenceOverlays();
-
-  // Renderiza marcador de "Você"
+  // Renderiza Lugares Salvos e Membros no Mapa
+  renderPlaceOverlays();
   updateAllMarkers();
 }
 
 /* =========================================================
-   EXCLUSÃO DE PONTOS / MEMBROS
+   ÍCONES E MARCADORES ESTILO APPLE MAPS
 ========================================================= */
-function deleteMemberById(id) {
-  playTactileClick();
-
-  // Remove marcador do mapa
-  const marker = markersMap.get(id);
-  if (marker) {
-    map.removeLayer(marker);
-    markersMap.delete(id);
-  }
-
-  // Remove rastro
-  const trail = trailsMap.get(id);
-  if (trail) {
-    map.removeLayer(trail);
-    trailsMap.delete(id);
-  }
-
-  // Remove do estado
-  removeMember(id);
-
-  // Atualiza interface
-  updateAllMarkers();
-  renderMembersList();
-  showToast('Ponto excluído com sucesso.', 'info');
-}
-
-function clearAllMembersAction() {
-  playTactileClick();
-
-  // Remove todos os marcadores com exceção de "Você"
-  markersMap.forEach((marker, id) => {
-    if (id !== state.currentUser.id) {
-      map.removeLayer(marker);
-      markersMap.delete(id);
-    }
-  });
-
-  // Remove rastros de outros pontos
-  trailsMap.forEach((trail, id) => {
-    if (id !== state.currentUser.id) {
-      map.removeLayer(trail);
-      trailsMap.delete(id);
-    }
-  });
-
-  clearAllMembers();
-  updateAllMarkers();
-  renderMembersList();
-  showToast('Todos os pontos manuais foram excluídos.', 'info');
-}
-
-/**
- * Visualiza o centro de Manaus no mapa sem mover o marcador real do GPS
- */
-export function goToManaus() {
-  playTactileClick();
-  autoFollowUser = false;
-  map.flyTo([MANAUS_COORDS.lat, MANAUS_COORDS.lng], 14, { duration: 1.2 });
-  showToast('Visualizando Manaus. Toque em "Seguir Meu GPS" para retornar à sua posição.', 'info');
-  const recenterBtn = document.getElementById('btn-recenter-floating');
-  if (recenterBtn) {
-    const lbl = document.getElementById('recenter-label');
-    if (lbl) lbl.textContent = 'Seguir Meu GPS';
-    recenterBtn.style.display = 'inline-flex';
-  }
-}
-
-/**
- * Força a solicitação de GPS nativo do aparelho
- */
-export function forceDeviceGPS() {
-  playTactileClick();
-  locationMode = 'gps';
-  autoFollowUser = true;
-  const recenterBtn = document.getElementById('btn-recenter-floating');
-  if (recenterBtn) recenterBtn.style.display = 'none';
-
-  const hudGpsStatus = document.getElementById('hud-gps-status');
-  const hudDot = document.querySelector('#hud-user-status .hud-dot');
-  if (hudGpsStatus) hudGpsStatus.textContent = 'Obtendo GPS...';
-  if (hudDot) hudDot.className = 'hud-dot online pulse-live';
-
-  if (!('geolocation' in navigator)) {
-    showToast('Dispositivo não suporta API de Geolocalização.', 'info');
-    return;
-  }
-
-  showToast('Sintonizando satélites GPS do celular...', 'info');
-
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const banner = document.getElementById('gps-permission-banner');
-      if (banner) banner.style.display = 'none';
-
-      const { latitude, longitude, accuracy, speed } = pos.coords;
-      const speedKmH = (speed !== null && speed !== undefined && speed > 0) ? speed * 3.6 : 0;
-
-      updateCurrentUserPosition(latitude, longitude, accuracy, speedKmH);
-      map.flyTo([latitude, longitude], 16, { duration: 1.2 });
-      showToast('GPS ao vivo conectado com sucesso!', 'info');
-
-      reverseGeocode(latitude, longitude).then((addr) => {
-        const addrMe = document.getElementById('addr-me');
-        if (addrMe) addrMe.textContent = addr;
-      });
-
-      renderMembersList();
-    },
-    (err) => {
-      console.warn('GPS error:', err);
-      showToast('Permissão de GPS negada ou sem sinal.', 'info');
-      const banner = document.getElementById('gps-permission-banner');
-      if (banner && err.code === 1) banner.style.display = 'block';
-    },
-    { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-  );
-}
-
-/* =========================================================
-   RENDERIZAÇÃO DE MARCADORES CUSTOMIZADOS
-========================================================= */
-function createMarkerIcon(member) {
+function createMemberMarkerIcon(member) {
   const isMe = member.isMe;
-  const color = isMe ? '#00F0FF' : (member.color || '#38BDF8');
-  const avatar = member.avatar || member.name.substring(0, 2).toUpperCase();
-  const speedText = member.speed > 1 ? `${Math.round(member.speed)} km/h` : 'Parado';
-  const sosClass = member.sos ? 'sos' : '';
-  const meClass = isMe ? 'is-command-center' : '';
+  const color = member.color || (isMe ? '#007AFF' : '#EC4899');
+  const avatarText = member.avatar || member.name.slice(0, 2).toUpperCase();
+  const photoUrl = member.photo || '';
+  const isMoving = member.speed && member.speed > 5;
+  const haloHtml = isMoving ? `<div class="marker-pulse-halo" style="border-color:${color};"></div>` : '';
+
+  const avatarStyle = photoUrl
+    ? `background-image: url('${photoUrl}'); background-color: ${color};`
+    : `background-color: ${color};`;
 
   const html = `
-    <div class="custom-radar-marker ${meClass} ${sosClass}" style="--marker-color: ${color}">
-      ${isMe ? '<div class="marker-radar-sweep"></div><div class="marker-radar-ping"></div><div class="marker-radar-outer-ring"></div>' : ''}
-      ${
-        member.heading !== undefined
-          ? `<div class="marker-heading-cone" style="transform: rotate(${member.heading}deg)"></div>`
-          : ''
-      }
-      <div class="marker-avatar-inner" title="${member.name} (${isMe ? 'Ponto Central VC · GPS Ao Vivo via Satélite' : speedText})">
-        ${member.sos ? '!' : (isMe ? 'VC' : avatar)}
+    <div class="apple-map-marker">
+      <div class="marker-pin-avatar" style="${avatarStyle}">
+        ${haloHtml}
+        ${photoUrl ? '' : avatarText}
       </div>
-      <div class="marker-label-tag">${isMe ? 'VC · GPS AO VIVO' : `${member.name.split(' ')[0]} · ${speedText}`}</div>
+      <div class="marker-label-tag">
+        ${member.name}
+      </div>
     </div>
   `;
 
   return L.divIcon({
-    html: html,
-    className: 'leaflet-div-marker-wrapper',
-    iconSize: [52, 52],
-    iconAnchor: [26, 26],
+    html,
+    className: 'apple-leaflet-marker',
+    iconSize: [44, 54],
+    iconAnchor: [22, 27],
   });
 }
 
+function createPlaceMarkerIcon(place) {
+  const html = `
+    <div class="place-map-marker">
+      <div class="place-map-icon" style="border-color:${place.color || '#007AFF'};">
+        ${place.icon || '📍'}
+      </div>
+      <div class="marker-label-tag">
+        ${place.name}
+      </div>
+    </div>
+  `;
+
+  return L.divIcon({
+    html,
+    className: 'apple-place-marker',
+    iconSize: [36, 46],
+    iconAnchor: [18, 23],
+  });
+}
+
+/* =========================================================
+   ATUALIZAÇÃO DE MARCADORES DOS MEMBROS NO MAPA
+========================================================= */
 function updateMarkerForMember(member) {
-  let marker = markersMap.get(member.id);
+  if (!map) return;
 
-  if (!marker) {
-    // Marcador de VOCÊ é 100% NÃO-ARRASTÁVEL: atrelado ao sinal de GPS real do celular
-    marker = L.marker([member.lat, member.lng], {
-      icon: createMarkerIcon(member),
-      zIndexOffset: member.isMe ? 1000 : 500,
-      draggable: false, // Bloqueado: NUNCA arrastável manualmente
-    }).addTo(map);
+  const icon = createMemberMarkerIcon(member);
 
-    marker.on('click', () => {
-      focusMember(member.id);
-    });
-
-    // Se for ponto manual, anexa popup com opção de exclusão
-    if (!member.isMe) {
-      marker.bindPopup(`
-        <div class="marker-popup-card">
-          <strong style="color:var(--text-main); font-size:13px;">${member.name}</strong>
-          <div style="font-size:11px; color:var(--text-muted); margin: 4px 0 8px;">${member.role || 'Ponto Manual'}</div>
-          <button class="btn-popup-delete" data-popup-delete="${member.id}">Excluir Ponto</button>
-        </div>
-      `);
-    }
-
-    markersMap.set(member.id, marker);
+  if (markersMap.has(member.id)) {
+    const existingMarker = markersMap.get(member.id);
+    existingMarker.setLatLng([member.lat, member.lng]);
+    existingMarker.setIcon(icon);
   } else {
-    marker.setLatLng([member.lat, member.lng]);
-    marker.setIcon(createMarkerIcon(member));
-  }
-
-  // Atualiza rastro de deslocamento (trail polyline)
-  if (showTrails && member.history && member.history.length > 1) {
-    let trail = trailsMap.get(member.id);
-    const latlngs = member.history.map((h) => [h.lat, h.lng]);
-
-    if (!trail) {
-      trail = L.polyline(latlngs, {
-        color: member.color || (member.isMe ? '#00F0FF' : '#38BDF8'),
-        weight: 2.5,
-        opacity: 0.8,
-        dashArray: '3, 6',
-        lineCap: 'round',
-      }).addTo(map);
-      trailsMap.set(member.id, trail);
-    } else {
-      trail.setLatLngs(latlngs);
-    }
+    const marker = L.marker([member.lat, member.lng], { icon }).addTo(map);
+    marker.on('click', () => {
+      openMemberDetailSheet(member);
+    });
+    markersMap.set(member.id, marker);
   }
 }
 
 function updateAllMarkers() {
-  // Limpa marcadores de membros removidos
-  const activeIds = new Set([state.currentUser.id, ...state.members.keys()]);
-  markersMap.forEach((marker, id) => {
-    if (!activeIds.has(id)) {
-      map.removeLayer(marker);
-      markersMap.delete(id);
-    }
-  });
-
-  // Atualiza marcador de "Você"
   updateMarkerForMember(state.currentUser);
-
-  // Atualiza círculo de precisão
-  if (userAccuracyCircle) {
-    userAccuracyCircle.setLatLng([state.currentUser.lat, state.currentUser.lng]);
-    userAccuracyCircle.setRadius(state.currentUser.accuracy || 10);
-  }
-
-  // Atualiza membros reais conectados
   state.members.forEach((member) => {
     updateMarkerForMember(member);
   });
 }
 
 /* =========================================================
-   CERCAS VIRTUAIS (GEOFENCES) NO MAPA
+   RENDERIZAÇÃO DE LUGARES SALVOS NO MAPA
 ========================================================= */
-function renderGeofenceOverlays() {
-  geofencesMap.forEach((circle) => map.removeLayer(circle));
-  geofencesMap.clear();
+function renderPlaceOverlays() {
+  if (!map) return;
 
-  state.geofences.forEach((fence) => {
-    const circle = L.circle([fence.lat, fence.lng], {
-      radius: fence.radius,
-      color: fence.color,
-      fillColor: fence.color,
+  // Remove círculos e marcadores de lugares antigos
+  placeCirclesMap.forEach((circle) => map.removeLayer(circle));
+  placeMarkersMap.forEach((marker) => map.removeLayer(marker));
+  placeCirclesMap.clear();
+  placeMarkersMap.clear();
+
+  state.geofences.forEach((place) => {
+    // Círculo translúcido suave
+    const circle = L.circle([place.lat, place.lng], {
+      radius: place.radius || 250,
+      color: place.color || '#007AFF',
+      weight: 1.5,
+      opacity: 0.7,
+      fillColor: place.color || '#007AFF',
       fillOpacity: 0.12,
-      weight: 2,
-      dashArray: '6, 6',
     }).addTo(map);
 
-    circle.bindTooltip(`${fence.name} (${fence.radius}m)`, {
-      permanent: false,
-      direction: 'top',
-      className: 'fence-tooltip',
+    // Marcador central com ícone
+    const icon = createPlaceMarkerIcon(place);
+    const marker = L.marker([place.lat, place.lng], { icon }).addTo(map);
+    marker.on('click', () => {
+      map.flyTo([place.lat, place.lng], 16, { duration: 0.8 });
     });
 
-    geofencesMap.set(fence.id, circle);
-  });
-
-  renderGeofencesSidebarList();
-}
-
-function renderGeofencesSidebarList() {
-  const container = document.getElementById('geofences-list');
-  if (!container) return;
-
-  if (state.geofences.length === 0) {
-    container.innerHTML = `
-      <div class="empty-state-box">
-        <p>Nenhuma cerca virtual cadastrada.</p>
-        <button class="btn-text-action" id="btn-create-first-fence">+ Criar Área Segura</button>
-      </div>
-    `;
-    document.getElementById('btn-create-first-fence')?.addEventListener('click', () => {
-      openFenceModal();
-    });
-    return;
-  }
-
-  container.innerHTML = state.geofences
-    .map(
-      (f) => `
-    <div class="geofence-chip" data-fence-id="${f.id}">
-      <div class="fence-left">
-        <span class="fence-color-dot" style="background: ${f.color}"></span>
-        <strong>${f.name}</strong>
-      </div>
-      <div class="fence-right">
-        <span class="fence-radius-tag">${f.radius}m</span>
-        <button class="btn-delete-fence" data-delete-id="${f.id}" title="Remover Cerca">&times;</button>
-      </div>
-    </div>
-  `
-    )
-    .join('');
-
-  container.querySelectorAll('.geofence-chip').forEach((el) => {
-    el.addEventListener('click', (e) => {
-      if (e.target.classList.contains('btn-delete-fence')) return;
-      const fenceId = el.getAttribute('data-fence-id');
-      const fence = state.geofences.find((f) => f.id === fenceId);
-      if (fence) {
-        map.flyTo([fence.lat, fence.lng], 16, { duration: 1 });
-        playTactileClick();
-      }
-    });
-  });
-
-  container.querySelectorAll('.btn-delete-fence').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = btn.getAttribute('data-delete-id');
-      state.geofences = state.geofences.filter((f) => f.id !== id);
-      renderGeofenceOverlays();
-      showToast('Cerca virtual removida', 'info');
-    });
+    placeCirclesMap.set(place.id, circle);
+    placeMarkersMap.set(place.id, marker);
   });
 }
 
 /* =========================================================
-   SIDEBAR & LISTA DE MEMBROS
+   ROTA AO VIVO ATÉ UM MEMBRO
 ========================================================= */
-async function renderMembersList() {
-  const container = document.getElementById('members-list');
-  if (!container) return;
+function drawRouteToMember(member) {
+  if (!map) return;
 
-  const otherMembers = Array.from(state.members.values());
-  const allMembers = [state.currentUser, ...otherMembers];
-
-  // Controla o botão "Limpar Pontos" no topo da sidebar
-  const btnClearAll = document.getElementById('btn-clear-all-members');
-  if (btnClearAll) {
-    btnClearAll.style.display = otherMembers.length > 0 ? 'inline-block' : 'none';
-    btnClearAll.onclick = (e) => {
-      e.stopPropagation();
-      clearAllMembersAction();
-    };
+  // Remove rota anterior se existir
+  if (activeRoutePolyline) {
+    map.removeLayer(activeRoutePolyline);
+    activeRoutePolyline = null;
   }
 
-  // Renderiza cartão de "Você"
-  const isFocusedMe = activeFocusedMemberId === state.currentUser.id ? 'focused' : '';
-  const mySpeedText = state.currentUser.speed > 1 ? `${Math.round(state.currentUser.speed)} km/h` : 'Parado';
-  const isOnline = navigator.onLine;
-  const roleText = isOnline
-    ? 'GPS Ao Vivo · Telemetria via Satélite'
-    : 'GPS Satélite Ativo · Modo Offline';
-  const badgeHtml = isOnline
-    ? '<span class="live-tag-mini">AO VIVO</span>'
-    : '<span class="live-tag-offline">OFFLINE</span>';
+  const startCoords = [state.currentUser.lat, state.currentUser.lng];
+  const destCoords = [member.lat, member.lng];
 
-  let html = `
-    <div class="member-card member-card-shell ${isFocusedMe}" data-member-id="${state.currentUser.id}" style="--member-color: ${state.currentUser.color}">
-      <div class="member-card-core">
-        <div class="member-card-top">
-          <div class="member-info-left">
-            <div class="member-avatar" style="--member-color: ${state.currentUser.color}">
-              ${state.currentUser.avatar}
-              <span class="online-indicator"></span>
-            </div>
-            <div class="member-names">
-              <div class="member-name-row">
-                <span class="member-name">${state.currentUser.name}</span>
-                <span class="me-badge">VOCÊ</span>
-                ${badgeHtml}
-              </div>
-              <span class="member-role">${roleText}</span>
-            </div>
-          </div>
-          <div class="member-status-right">
-            <span class="speed-badge ${state.currentUser.speed > 1 ? 'moving' : ''}">
-              ${mySpeedText}
-            </span>
-            <span class="battery-badge">
-              ${state.currentUser.battery}%
-            </span>
-          </div>
-        </div>
-        <div class="member-card-bottom">
-          <span class="member-address" id="addr-me">Obtendo endereço...</span>
-          <span class="member-dist">${isOnline ? `Precisão ±${Math.round(state.currentUser.accuracy || 10)}m` : 'Offline (Satélite)'}</span>
-        </div>
-      </div>
-    </div>
-  `;
+  // Desenha linha suave estilizada
+  activeRoutePolyline = L.polyline([startCoords, destCoords], {
+    color: '#007AFF',
+    weight: 4,
+    opacity: 0.9,
+    dashArray: '8, 8',
+    lineCap: 'round',
+  }).addTo(map);
 
-  // Se houver outros membros, renderiza com botão individual de exclusão
-  if (otherMembers.length > 0) {
-    for (const m of otherMembers) {
-      const distToMe = calculateDistance(
-        state.currentUser.lat,
-        state.currentUser.lng,
-        m.lat,
-        m.lng
-      );
-      const isFocused = activeFocusedMemberId === m.id ? 'focused' : '';
-      const speedStr = m.speed > 1 ? `${Math.round(m.speed)} km/h` : 'Parado';
+  map.fitBounds(L.latLngBounds([startCoords, destCoords]), {
+    padding: [80, 80],
+    maxZoom: 16,
+  });
 
-      html += `
-        <div class="member-card member-card-shell ${isFocused}" data-member-id="${m.id}" style="--member-color: ${m.color}">
-          <div class="member-card-core">
-            <div class="member-card-top">
-              <div class="member-info-left">
-                <div class="member-avatar" style="--member-color: ${m.color}">
-                  ${m.avatar}
-                  <span class="online-indicator"></span>
-                </div>
-                <div class="member-names">
-                  <div class="member-name-row">
-                    <span class="member-name">${m.name}</span>
-                  </div>
-                  <span class="member-role">${m.role || 'Ponto Manual'}</span>
-                </div>
-              </div>
-              <div class="member-actions-right">
-                <div class="member-status-badges">
-                  <span class="speed-badge ${m.speed > 1 ? 'moving' : ''}">${speedStr}</span>
-                  <span class="battery-badge">${m.battery}%</span>
-                </div>
-                <button class="btn-delete-member" data-delete-id="${m.id}" title="Excluir este ponto">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="delete-icon">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                    <line x1="10" y1="11" x2="10" y2="17"></line>
-                    <line x1="14" y1="11" x2="14" y2="17"></line>
-                  </svg>
-                </button>
-              </div>
-            </div>
-            <div class="member-card-bottom">
-              <span class="member-address" id="addr-${m.id.replace(/[^a-zA-Z0-9]/g, '_')}">Obtendo endereço...</span>
-              <span class="member-dist">${formatDistance(distToMe)} de você</span>
-            </div>
-          </div>
-        </div>
-      `;
+  const distMeters = calculateDistance(
+    state.currentUser.lat,
+    state.currentUser.lng,
+    member.lat,
+    member.lng
+  );
+  const formattedDist = formatDistance(distMeters);
+  const etaMinutes = Math.max(2, Math.round((distMeters / 1000) * 2.2));
+
+  // Exibe o banner de rota ativa no topo
+  const banner = document.getElementById('active-route-banner');
+  const destName = document.getElementById('route-dest-name');
+  const metaText = document.getElementById('route-meta-text');
+  const btnGoogle = document.getElementById('btn-route-google');
+
+  if (banner && destName && metaText) {
+    destName.textContent = `Rota até ${member.name}`;
+    metaText.textContent = `${formattedDist} · ~${etaMinutes} min em trânsito`;
+    banner.style.display = 'block';
+
+    if (btnGoogle) {
+      btnGoogle.onclick = () => {
+        const url = `https://www.google.com/maps/dir/?api=1&origin=${state.currentUser.lat},${state.currentUser.lng}&destination=${member.lat},${member.lng}`;
+        window.open(url, '_blank');
+      };
     }
-  } else {
-    // Estado limpo amigável quando apenas você está no círculo
-    html += `
-      <div class="empty-state-members">
-        <div class="empty-radar-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="28" height="28">
-            <circle cx="12" cy="12" r="9"></circle>
-            <path d="M12 3a9 9 0 0 1 9 9"></path>
-            <circle cx="12" cy="12" r="3"></circle>
-          </svg>
-        </div>
-        <h4>Nenhum outro membro no radar</h4>
-        <p>Compartilhe o link do círculo ou use a barra de busca para encontrar qualquer local.</p>
-        <button class="btn btn-secondary btn-sm" id="btn-quick-invite">
-          <span>+ Convidar Pessoas</span>
-        </button>
-      </div>
-    `;
   }
 
-  container.innerHTML = html;
-
-  // Botão de convite rápido dentro do estado vazio
-  document.getElementById('btn-quick-invite')?.addEventListener('click', () => {
-    openShareModal();
-  });
-
-  // Associa cliques para excluir ponto
-  container.querySelectorAll('.btn-delete-member').forEach((btn) => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const id = btn.getAttribute('data-delete-id');
-      deleteMemberById(id);
-    });
-  });
-
-  // Associa cliques para focar no mapa
-  container.querySelectorAll('.member-card').forEach((card) => {
-    card.addEventListener('click', (e) => {
-      if (e.target.closest('.btn-delete-member')) return;
-      const id = card.getAttribute('data-member-id');
-      focusMember(id);
-    });
-  });
-
-  // Atualiza endereços via geocodificação reversa
-  const addrMe = document.getElementById('addr-me');
-  if (addrMe) {
-    reverseGeocode(state.currentUser.lat, state.currentUser.lng).then((addr) => {
-      addrMe.textContent = addr;
-    });
-  }
-
-  otherMembers.forEach(async (m) => {
-    const addrEl = document.getElementById(`addr-${m.id.replace(/[^a-zA-Z0-9]/g, '_')}`);
-    if (addrEl) {
-      const addr = await reverseGeocode(m.lat, m.lng);
-      addrEl.textContent = addr;
-    }
-  });
-
-  // Atualiza contagem no header
-  const countEl = document.getElementById('header-member-count');
-  if (countEl) countEl.textContent = allMembers.length;
+  state.activeRoute = { destMember: member };
 }
 
-function focusMember(memberId) {
-  playTactileClick();
-  activeFocusedMemberId = memberId;
-
-  const target =
-    memberId === state.currentUser.id ? state.currentUser : state.members.get(memberId);
-
-  if (target) {
-    map.flyTo([target.lat, target.lng], 15, {
-      duration: 1.2,
-      easeLinearity: 0.25,
-    });
-    playRadarPing();
+function clearActiveRoute() {
+  if (activeRoutePolyline && map) {
+    map.removeLayer(activeRoutePolyline);
+    activeRoutePolyline = null;
   }
-
-  // Atualiza classe focused nos cards
-  document.querySelectorAll('.member-card').forEach((card) => {
-    card.classList.toggle('focused', card.getAttribute('data-member-id') === memberId);
-  });
+  const banner = document.getElementById('active-route-banner');
+  if (banner) banner.style.display = 'none';
+  state.activeRoute = null;
 }
 
 /* =========================================================
-/* =========================================================
-   GEOLOCALIZAÇÃO DO USUÁRIO EM TEMPO REAL (GPS DO CELULAR & OFFLINE)
+   RASTREAMENTO GPS REAL DO CELULAR
 ========================================================= */
-function throttledReverseGeocode(lat, lng) {
-  if (!navigator.onLine) {
-    const addrMe = document.getElementById('addr-me');
-    if (addrMe && (!addrMe.textContent || addrMe.textContent === 'Obtendo endereço...')) {
-      addrMe.textContent = 'GPS Satélite Ativo (Offline)';
-    }
-    return;
-  }
-
-  const now = Date.now();
-  if (lastGeocodedAddressCoords) {
-    const dist = calculateDistance(lastGeocodedAddressCoords.lat, lastGeocodedAddressCoords.lng, lat, lng);
-    // Se moveu menos de 25 metros e faz menos de 20 segundos, evita flood no Nominatim
-    if (dist < 25 && now - lastGeocodedAddressTime < 20000) {
-      return;
-    }
-  }
-
-  lastGeocodedAddressCoords = { lat, lng };
-  lastGeocodedAddressTime = now;
-
-  reverseGeocode(lat, lng).then((addr) => {
-    const addrMe = document.getElementById('addr-me');
-    if (addrMe) addrMe.textContent = addr;
-  });
-}
-
-function updateCurrentUserPosition(lat, lng, accuracy = 10, speed = 0) {
+function updateCurrentUserPosition(lat, lng, accuracy = 10, speedKmH = 0) {
   state.currentUser.lat = lat;
   state.currentUser.lng = lng;
-  state.currentUser.accuracy = accuracy;
-  state.currentUser.speed = speed;
+  state.currentUser.accuracy = Math.round(accuracy);
+  state.currentUser.speed = Math.round(speedKmH);
   state.currentUser.updatedAt = Date.now();
 
-  // Persistência local para modo offline
-  try {
-    localStorage.setItem(
-      'geopulse_last_known_pos',
-      JSON.stringify({
-        lat,
-        lng,
-        accuracy,
-        speed,
-        time: Date.now(),
-      })
-    );
-  } catch (e) {
-    // ignore
+  // Define status de atividade inteligente
+  if (speedKmH > 25) {
+    state.currentUser.activity = `🚗 Dirigindo · ${Math.round(speedKmH)} km/h`;
+  } else if (speedKmH > 3) {
+    state.currentUser.activity = `🚶 Caminhando · ${Math.round(speedKmH)} km/h`;
+  } else {
+    state.currentUser.activity = '📍 Parado';
   }
 
-  if (!state.currentUser.history) state.currentUser.history = [];
-  const lastH = state.currentUser.history[state.currentUser.history.length - 1];
-  if (!lastH || calculateDistance(lastH.lat, lastH.lng, lat, lng) > 2.5) {
-    state.currentUser.history.push({ lat, lng, time: Date.now() });
-    if (state.currentUser.history.length > 50) state.currentUser.history.shift();
-
-    try {
-      localStorage.setItem('geopulse_offline_breadcrumbs', JSON.stringify(state.currentUser.history));
-    } catch (e) {
-      // ignore
+  // Atualiza círculo de precisão
+  if (map) {
+    if (userAccuracyCircle) {
+      userAccuracyCircle.setLatLng([lat, lng]);
+      userAccuracyCircle.setRadius(accuracy);
+    } else {
+      userAccuracyCircle = L.circle([lat, lng], {
+        radius: accuracy,
+        color: '#007AFF',
+        weight: 1,
+        fillColor: '#007AFF',
+        fillOpacity: 0.08,
+      }).addTo(map);
     }
   }
 
-  // Atualiza HUD
-  const speedEl = document.getElementById('hud-speed');
-  const accEl = document.getElementById('hud-accuracy');
-  if (speedEl) speedEl.textContent = `${Math.round(speed)} km/h`;
-  if (accEl) accEl.textContent = `±${Math.round(accuracy)} m`;
-
-  // Atualiza marcadores e transmite para outras abas locais
-  updateAllMarkers();
+  updateMarkerForMember(state.currentUser);
+  renderMembersList();
+  renderPlacesList();
   broadcastUserUpdate(state.currentUser);
-
-  // Transmite para celular/PC remoto conectado via WebRTC P2P se online
-  if (p2pEngine && navigator.onLine) {
-    p2pEngine.broadcastPosition(state.currentUser);
-  }
+  checkActivePlaces();
 }
 
 function startGeolocationTracking() {
-  const hudGpsStatus = document.getElementById('hud-gps-status');
-  const hudDot = document.querySelector('#hud-user-status .hud-dot');
-  const gpsBanner = document.getElementById('gps-permission-banner');
-
-  if (!('geolocation' in navigator)) {
-    if (hudGpsStatus) hudGpsStatus.textContent = 'Sem GPS';
-    if (hudDot) hudDot.className = 'hud-dot error';
-    return;
-  }
-
-  // Ativa Screen Wake Lock para o celular não desligar a tela durante o rastreamento
-  enableScreenWakeLock();
-
-  const isOnline = navigator.onLine;
-  if (hudGpsStatus) {
-    hudGpsStatus.innerHTML = isOnline
-      ? '<span class="live-tag-mini">AO VIVO</span> Sintonizando...'
-      : '<span class="live-tag-offline">OFFLINE</span> Satélite Ativo...';
-  }
-  if (hudDot) hudDot.className = 'hud-dot online pulse-live';
+  if (!('geolocation' in navigator)) return;
 
   const onSuccess = (pos) => {
-    if (gpsBanner) gpsBanner.style.display = 'none';
-
     const { latitude, longitude, accuracy, speed, heading } = pos.coords;
-    const speedKmH = speed !== null && speed !== undefined && speed > 0 ? speed * 3.6 : 0;
-
-    const onlineNow = navigator.onLine;
-    if (hudGpsStatus) {
-      if (onlineNow) {
-        hudGpsStatus.innerHTML = `<span class="live-tag-mini">AO VIVO</span> ${accuracy < 25 ? 'Alta Precisão' : 'GPS Ativo'}`;
-      } else {
-        hudGpsStatus.innerHTML = `<span class="live-tag-offline">OFFLINE</span> Satélite Ativo (±${Math.round(accuracy)}m)`;
-      }
-    }
-    if (hudDot) hudDot.className = onlineNow ? 'hud-dot online pulse-live' : 'hud-dot warning pulse-live';
-
-    // Rumo/Direção vinda do GPS
-    if (heading !== null && heading !== undefined && !isNaN(heading)) {
-      state.currentUser.heading = heading;
-    }
+    const speedKmH = speed ? speed * 3.6 : 0;
+    if (heading !== null && heading !== undefined) state.currentUser.heading = heading;
 
     updateCurrentUserPosition(latitude, longitude, accuracy, speedKmH);
 
-    // No primeiro sinal de GPS recebido: centraliza com zoom suave na localização real do celular!
-    if (isFirstGpsFix) {
-      isFirstGpsFix = false;
-      map.flyTo([latitude, longitude], 16, { duration: 1.2 });
-      showToast(
-        onlineNow ? 'GPS ao vivo conectado via satélite!' : 'Modo Offline: GPS conectado diretamente via satélite!',
-        'info'
-      );
-
-      if (onlineNow) {
-        reverseGeocode(latitude, longitude).then((addr) => {
-          const addrMe = document.getElementById('addr-me');
-          if (addrMe) addrMe.textContent = addr;
-        });
-        lastGeocodedAddressCoords = { lat: latitude, lng: longitude };
-        lastGeocodedAddressTime = Date.now();
-      } else {
-        const addrMe = document.getElementById('addr-me');
-        if (addrMe) addrMe.textContent = 'GPS Satélite Ativo (Offline)';
-      }
-    } else if (autoFollowUser) {
-      map.panTo([latitude, longitude], { animate: true, duration: 0.6 });
+    if (autoFollowUser && map) {
+      map.panTo([latitude, longitude], { animate: true, duration: 0.5 });
     }
 
+    // Geocodificação reversa periódica
     throttledReverseGeocode(latitude, longitude);
-    renderMembersList();
-    checkActiveGeofences();
   };
 
   const onError = (err) => {
-    console.warn('Geolocation info:', err.code, err.message);
-    if (err.code === 1) {
-      if (hudGpsStatus) hudGpsStatus.textContent = 'Permissão Negada';
-      if (hudDot) hudDot.className = 'hud-dot error';
-      if (gpsBanner) gpsBanner.style.display = 'block';
-      showToast('Permita a localização no celular para atualizar em tempo real.', 'sos');
-    } else if (err.code === 2) {
-      if (hudGpsStatus) hudGpsStatus.textContent = 'Buscando Satélite...';
-      if (hudDot) hudDot.className = 'hud-dot warning';
-    } else if (err.code === 3) {
-      if (hudGpsStatus) hudGpsStatus.textContent = 'Sintonizando Satélite...';
-      if (hudDot) hudDot.className = 'hud-dot warning';
-    }
+    console.debug('GPS Status:', err.code, err.message);
+    const banner = document.getElementById('gps-permission-banner');
+    if (err.code === 1 && banner) banner.style.display = 'block';
   };
 
-  const geoOptions = {
+  navigator.geolocation.getCurrentPosition(onSuccess, onError, {
     enableHighAccuracy: true,
-    timeout: 15000,
+    timeout: 8000,
     maximumAge: 0,
-  };
+  });
 
-  // 1. Fix imediato via getCurrentPosition
-  navigator.geolocation.getCurrentPosition(onSuccess, onError, geoOptions);
+  gpsWatchId = navigator.geolocation.watchPosition(onSuccess, onError, {
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 1000,
+  });
 
-  // 2. Monitoramento contínuo em tempo real via watchPosition
-  if (gpsWatchId !== null) {
-    navigator.geolocation.clearWatch(gpsWatchId);
-  }
-  gpsWatchId = navigator.geolocation.watchPosition(onSuccess, onError, geoOptions);
-
-  // 3. Heartbeat a cada 6s (impede que browsers mobile silenciem o GPS em repouso)
-  setInterval(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => onSuccess(pos),
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
-  }, 6000);
-
-  // 4. Bússola Digital do Aparelho (orienta o pino no mapa em tempo real)
-  if (window.DeviceOrientationEvent) {
-    window.addEventListener(
-      'deviceorientation',
-      (e) => {
-        if (!state.currentUser.speed || state.currentUser.speed < 2) {
-          let heading = null;
-          if (e.webkitCompassHeading !== undefined && e.webkitCompassHeading !== null) {
-            heading = e.webkitCompassHeading;
-          } else if (e.alpha !== null && e.alpha !== undefined) {
-            heading = (360 - e.alpha) % 360;
-          }
-          if (heading !== null) {
-            state.currentUser.heading = heading;
-            updateAllMarkers();
-          }
-        }
-      },
-      { passive: true }
-    );
-  }
-
-  // 5. Atualiza status da bateria real
+  // Atualiza bateria real do aparelho
   getDeviceBattery().then((bat) => {
     state.currentUser.battery = bat.level;
     state.currentUser.charging = bat.charging;
@@ -932,36 +399,384 @@ function startGeolocationTracking() {
   });
 }
 
-/* =========================================================
-   CHECA CERCAS VIRTUAIS QUANDO HOUVER MOVIMENTAÇÃO
-========================================================= */
-function checkActiveGeofences() {
-  if (state.geofences.length === 0) return;
-  const allMembers = [state.currentUser, ...Array.from(state.members.values())];
-  checkGeofences(state.geofences, allMembers, (event) => {
-    const action = event.type === 'ENTERED' ? 'entrou na área' : 'saiu da área';
-    showToast(`${event.memberName} ${action} ${event.fenceName}.`, 'geofence');
+function throttledReverseGeocode(lat, lng) {
+  const now = Date.now();
+  if (now - lastGeocodedAddressTime < 30000) return;
+  lastGeocodedAddressTime = now;
+
+  reverseGeocode(lat, lng).then((addr) => {
+    if (addr) state.currentUser.address = addr;
   });
 }
 
 /* =========================================================
-   TOAST DE NOTIFICAÇÕES
+   CHECA LUGARES SALVOS & NOTIFICA CHEGADA E SAÍDA
 ========================================================= */
-function showToast(message, type = 'info') {
-  const container = document.getElementById('toast-container');
+function checkActivePlaces() {
+  if (state.geofences.length === 0) return;
+  const allMembers = [state.currentUser, ...Array.from(state.members.values())];
+
+  checkGeofences(state.geofences, allMembers, (event) => {
+    const action = event.type === 'ENTERED' ? 'chegou em' : 'saiu de';
+    showToast(`${event.memberName} ${action} ${event.fenceName}.`, 'geofence');
+    notifyGeofenceEvent(event.memberName, action, event.fenceName);
+    renderPlacesList();
+  });
+}
+
+/* =========================================================
+   RENDERIZAÇÃO DA GAVETA (MEMBROS & LUGARES SALVOS)
+========================================================= */
+function renderMembersList() {
+  const container = document.getElementById('members-list');
   if (!container) return;
 
-  const toast = document.createElement('div');
-  toast.className = `toast ${type}`;
-  toast.innerHTML = `<span>${message}</span>`;
+  const countBadge = document.getElementById('header-member-count');
+  const tabBadge = document.getElementById('tab-badge-people');
+  const totalCount = 1 + state.members.size;
 
-  container.appendChild(toast);
+  if (countBadge) countBadge.textContent = totalCount;
+  if (tabBadge) tabBadge.textContent = totalCount;
 
-  setTimeout(() => {
-    toast.style.opacity = '0';
-    toast.style.transform = 'translateY(8px)';
-    setTimeout(() => toast.remove(), 250);
-  }, 3500);
+  const allMembers = [state.currentUser, ...Array.from(state.members.values())];
+
+  container.innerHTML = allMembers
+    .map((member) => {
+      const isMe = member.isMe;
+      const avatarText = member.avatar || member.name.slice(0, 2).toUpperCase();
+      const color = member.color || (isMe ? '#007AFF' : '#EC4899');
+      const photo = member.photo || '';
+      const avatarStyle = photo
+        ? `background-image: url('${photo}'); background-color: ${color};`
+        : `background-color: ${color};`;
+
+      const dist = isMe
+        ? ''
+        : formatDistance(
+            calculateDistance(
+              state.currentUser.lat,
+              state.currentUser.lng,
+              member.lat,
+              member.lng
+            )
+          );
+
+      const relationText = isMe ? 'Você (Organizador)' : member.relation || 'Membro do Círculo';
+
+      return `
+        <div class="member-card ${state.selectedMemberId === member.id ? 'active-selected' : ''}" data-id="${member.id}">
+          <div class="card-avatar-wrapper">
+            <div class="card-avatar" style="${avatarStyle}">
+              ${photo ? '' : avatarText}
+            </div>
+            <span class="card-avatar-dot"></span>
+          </div>
+          <div class="card-info">
+            <div class="card-name-row">
+              <strong class="card-name">${member.name}</strong>
+              <span class="card-battery">🔋 ${member.battery || 88}%</span>
+            </div>
+            <div class="card-activity-row">
+              <span class="card-activity">${member.activity || relationText}</span>
+              ${dist ? `<span class="card-distance">${dist}</span>` : ''}
+            </div>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  // Evento de clique para abrir a ficha de detalhes
+  container.querySelectorAll('.member-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const id = card.getAttribute('data-id');
+      const member =
+        id === state.currentUser.id
+          ? state.currentUser
+          : state.members.get(id);
+      if (member) openMemberDetailSheet(member);
+    });
+  });
+}
+
+function renderPlacesList() {
+  const container = document.getElementById('places-list');
+  if (!container) return;
+
+  const tabBadge = document.getElementById('tab-badge-places');
+  if (tabBadge) tabBadge.textContent = state.geofences.length;
+
+  const allMembers = [state.currentUser, ...Array.from(state.members.values())];
+
+  container.innerHTML = state.geofences
+    .map((place) => {
+      // Descobre quem está neste lugar agora
+      const peopleInside = allMembers.filter((m) => {
+        return calculateDistance(place.lat, place.lng, m.lat, m.lng) <= place.radius;
+      });
+
+      const presenceText =
+        peopleInside.length > 0
+          ? `${peopleInside.length} presente(s): ${peopleInside.map((p) => p.isMe ? 'Você' : p.name.split(' ')[0]).join(', ')}`
+          : 'Ninguém neste local agora';
+
+      return `
+        <div class="place-card" data-id="${place.id}">
+          <div class="place-icon-box" style="border-color:${place.color};">
+            ${place.icon || '📍'}
+          </div>
+          <div class="place-info">
+            <strong class="place-name">${place.name}</strong>
+            <span class="place-presence">${presenceText}</span>
+          </div>
+        </div>
+      `;
+    })
+    .join('');
+
+  container.querySelectorAll('.place-card').forEach((card) => {
+    card.addEventListener('click', () => {
+      const id = card.getAttribute('data-id');
+      const place = state.geofences.find((p) => p.id === id);
+      if (place && map) {
+        playTactileClick();
+        map.flyTo([place.lat, place.lng], 16, { duration: 0.8 });
+      }
+    });
+  });
+}
+
+/* =========================================================
+   FICHA COMPLETA DO MEMBRO (MEMBER DETAIL SHEET)
+========================================================= */
+function openMemberDetailSheet(member) {
+  playTactileClick();
+  state.selectedMemberId = member.id;
+
+  const sheet = document.getElementById('member-detail-sheet');
+  const avatarEl = document.getElementById('detail-avatar');
+  const nameEl = document.getElementById('detail-name');
+  const relationEl = document.getElementById('detail-relation');
+  const activityIcon = document.getElementById('detail-activity-icon');
+  const activityText = document.getElementById('detail-activity-text');
+  const addressEl = document.getElementById('detail-address');
+  const batteryEl = document.getElementById('detail-battery');
+  const speedEl = document.getElementById('detail-speed');
+  const distanceEl = document.getElementById('detail-distance');
+  const updatedEl = document.getElementById('detail-updated');
+
+  if (avatarEl) {
+    if (member.photo) {
+      avatarEl.style.backgroundImage = `url('${member.photo}')`;
+      avatarEl.textContent = '';
+    } else {
+      avatarEl.style.backgroundImage = '';
+      avatarEl.textContent = member.avatar || member.name.slice(0, 2).toUpperCase();
+    }
+    avatarEl.style.backgroundColor = member.color || '#007AFF';
+  }
+
+  if (nameEl) nameEl.textContent = member.name;
+  if (relationEl) relationEl.textContent = member.isMe ? 'Você · Organizador' : member.relation || 'Família Silva';
+  if (activityText) activityText.textContent = member.activity || 'Localização Ativa';
+  if (addressEl) addressEl.textContent = member.address || 'Adrianópolis, Manaus';
+  if (batteryEl) batteryEl.textContent = `${member.battery || 88}%`;
+  if (speedEl) speedEl.textContent = `${member.speed || 0} km/h`;
+
+  const distMeters = member.isMe
+    ? 0
+    : calculateDistance(state.currentUser.lat, state.currentUser.lng, member.lat, member.lng);
+  if (distanceEl) distanceEl.textContent = member.isMe ? 'Aqui' : formatDistance(distMeters);
+  if (updatedEl) updatedEl.textContent = 'Agora';
+
+  // Configura botão de Traçar Rota
+  const btnRoute = document.getElementById('btn-action-route');
+  if (btnRoute) {
+    btnRoute.onclick = () => {
+      playTactileClick();
+      drawRouteToMember(member);
+      closeMemberDetailSheet();
+    };
+  }
+
+  // Configura botão de Tocar Som (Ping)
+  const btnPing = document.getElementById('btn-action-ping');
+  if (btnPing) {
+    btnPing.onclick = () => {
+      playRadarPing();
+      showToast(`Sinal sonoro enviado para ${member.name}.`, 'info');
+    };
+  }
+
+  // Configura botão de Aviso ao Sair
+  const btnNotify = document.getElementById('btn-action-notify');
+  if (btnNotify) {
+    btnNotify.onclick = () => {
+      playTactileClick();
+      showToast(`Você será avisado quando ${member.name} sair da área.`, 'info');
+    };
+  }
+
+  // Configura botão Google Maps Externo
+  const btnExt = document.getElementById('btn-action-external-maps');
+  if (btnExt) {
+    btnExt.onclick = () => {
+      const url = `https://www.google.com/maps/dir/?api=1&origin=${state.currentUser.lat},${state.currentUser.lng}&destination=${member.lat},${member.lng}`;
+      window.open(url, '_blank');
+    };
+  }
+
+  // Centraliza o mapa suavemente no membro
+  if (map) {
+    map.flyTo([member.lat, member.lng], 16, { duration: 0.8 });
+  }
+
+  if (sheet) sheet.style.display = 'flex';
+}
+
+function closeMemberDetailSheet() {
+  playTactileClick();
+  const sheet = document.getElementById('member-detail-sheet');
+  if (sheet) sheet.style.display = 'none';
+  state.selectedMemberId = null;
+}
+
+/* =========================================================
+   MODAL MEU PERFIL
+========================================================= */
+function openProfileModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-profile');
+  const inputName = document.getElementById('input-profile-name');
+  const previewName = document.getElementById('profile-edit-name-preview');
+  const previewAvatar = document.getElementById('profile-edit-avatar-preview');
+
+  if (inputName) inputName.value = state.currentUser.name;
+  if (previewName) previewName.textContent = state.currentUser.name;
+  if (previewAvatar) {
+    if (state.currentUser.photo) {
+      previewAvatar.style.backgroundImage = `url('${state.currentUser.photo}')`;
+      previewAvatar.textContent = '';
+    } else {
+      previewAvatar.style.backgroundImage = '';
+      previewAvatar.textContent = state.currentUser.avatar;
+    }
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeProfileModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-profile');
+  if (modal) modal.style.display = 'none';
+}
+
+/* =========================================================
+   MODAL NOVO LUGAR SALVO
+========================================================= */
+function openPlaceModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-place');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closePlaceModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-place');
+  if (modal) modal.style.display = 'none';
+}
+
+/* =========================================================
+   MODAL COMPARTILHAR CÍRCULO
+========================================================= */
+function openShareModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-share');
+  const linkInput = document.getElementById('share-link-input');
+  const qrContainer = document.getElementById('qr-container');
+
+  const peerParam = p2pEngine ? `&peer=${p2pEngine.getMyPeerId()}` : '';
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?circle=${state.circleId}${peerParam}`;
+  if (linkInput) linkInput.value = inviteUrl;
+  if (qrContainer) qrContainer.innerHTML = generateQRCodeSVG(inviteUrl);
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeShareModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-share');
+  if (modal) modal.style.display = 'none';
+}
+
+/* =========================================================
+   CENTRAL DE NOTIFICAÇÕES PUSH
+========================================================= */
+function updateNotificationUI() {
+  const perm = getPermissionStatus();
+  const indicator = document.getElementById('notif-status-indicator');
+  const title = document.getElementById('notif-status-title');
+  const sub = document.getElementById('notif-status-sub');
+  const btnPerm = document.getElementById('btn-request-notification-perm');
+  const headerDot = document.getElementById('header-notif-dot');
+  const iosBanner = document.getElementById('notif-ios-banner');
+  const subJsonCode = document.getElementById('sub-json-code');
+
+  if (headerDot) {
+    headerDot.className = 'header-notif-dot ' + (perm === 'granted' ? 'granted' : perm === 'denied' ? 'denied' : '');
+  }
+
+  if (iosBanner) {
+    iosBanner.style.display = isIOS() ? 'block' : 'none';
+  }
+
+  if (indicator && title && sub && btnPerm) {
+    indicator.className = 'notif-status-indicator ' + (perm === 'granted' ? 'granted' : perm === 'denied' ? 'denied' : '');
+
+    if (perm === 'granted') {
+      title.textContent = 'Notificações Ativas';
+      sub.textContent = 'Aparelho pronto para receber alertas na tela de bloqueio.';
+      btnPerm.disabled = true;
+      btnPerm.innerHTML = '<span>Permitido ✓</span>';
+    } else if (perm === 'denied') {
+      title.textContent = 'Permissão Bloqueada';
+      sub.textContent = 'Permissão bloqueada no navegador ou Ajustes do iPhone.';
+      btnPerm.disabled = true;
+      btnPerm.innerHTML = '<span>Bloqueado</span>';
+    } else {
+      title.textContent = 'Permissão Pendente';
+      sub.textContent = 'Autorize notificações para receber avisos de chegada e saída.';
+      btnPerm.disabled = false;
+      btnPerm.innerHTML = '<span>Ativar no Aparelho</span>';
+    }
+  }
+
+  if (subJsonCode) {
+    getOrRegisterSubscription().then((subObj) => {
+      subJsonCode.textContent = subObj ? JSON.stringify(subObj, null, 2) : 'Clique em "Ativar no Aparelho".';
+    }).catch(() => {
+      subJsonCode.textContent = 'Sem subscrição ativa.';
+    });
+  }
+
+  const prefs = getNotificationPreferences();
+  const prefSos = document.getElementById('pref-sos-notif');
+  const prefFence = document.getElementById('pref-fence-notif');
+  if (prefSos) prefSos.checked = prefs.sos !== false;
+  if (prefFence) prefFence.checked = prefs.fence !== false;
+}
+
+function openNotificationsModal() {
+  playTactileClick();
+  updateNotificationUI();
+  const modal = document.getElementById('modal-notifications');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeNotificationsModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-notifications');
+  if (modal) modal.style.display = 'none';
 }
 
 /* =========================================================
@@ -974,7 +789,9 @@ function triggerSOS() {
   if (state.currentUser.sos) {
     startSOSAlarm();
     if (banner) banner.style.display = 'block';
-    showToast('ALERTA SOS ATIVADO! Transmitindo sinal de emergência.', 'sos');
+    showToast('ALERTA SOS ATIVADO! Transmitindo emergência.', 'sos');
+    notifySOSAlert(state.currentUser.name);
+
     if (p2pEngine) {
       p2pEngine.broadcastSOS({
         author: state.currentUser.name,
@@ -994,95 +811,80 @@ function triggerSOS() {
 }
 
 /* =========================================================
-   MODAL DE COMPARTILHAMENTO
+   TOAST NOTIFICATIONS
 ========================================================= */
-function openShareModal() {
-  playTactileClick();
-  const modalShare = document.getElementById('modal-share');
-  const shareLinkInput = document.getElementById('share-link-input');
-  const qrContainer = document.getElementById('qr-container');
+function showToast(message, type = 'info') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
 
-  const peerParam = p2pEngine ? `&peer=${p2pEngine.getMyPeerId()}` : '';
-  const inviteUrl = `${window.location.origin}${window.location.pathname}?circle=${state.circleId}${peerParam}`;
-  if (shareLinkInput) shareLinkInput.value = inviteUrl;
-  if (qrContainer) qrContainer.innerHTML = generateQRCodeSVG(inviteUrl);
-  if (modalShare) modalShare.style.display = 'flex';
-}
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `<span>${message}</span>`;
+  container.appendChild(toast);
 
-function openFenceModal() {
-  playTactileClick();
-  const modalFence = document.getElementById('modal-fence');
-  if (modalFence) modalFence.style.display = 'flex';
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateY(10px)';
+    setTimeout(() => toast.remove(), 250);
+  }, 3500);
 }
 
 /* =========================================================
    CONTROLES E EVENTOS DA UI
 ========================================================= */
 function setupUIEventListeners() {
-  // Alternar Camadas do Mapa
-  const btnMinimal = document.getElementById('btn-layer-minimal');
+  // Alternador de Camadas
+  const btnLayerToggle = document.getElementById('btn-layer-toggle');
+  const layerMenu = document.getElementById('layer-popup-menu');
   const btnDark = document.getElementById('btn-layer-dark');
-  const btnStreets = document.getElementById('btn-layer-streets');
   const btnSat = document.getElementById('btn-layer-satellite');
+  const btnStreets = document.getElementById('btn-layer-streets');
+
+  btnLayerToggle?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    playTactileClick();
+    if (layerMenu) layerMenu.style.display = layerMenu.style.display === 'none' ? 'flex' : 'none';
+  });
 
   const switchLayer = (layer, activeBtn) => {
     playTactileClick();
     if (currentTileLayer) map.removeLayer(currentTileLayer);
     currentTileLayer = layer;
     currentTileLayer.addTo(map);
-
-    [btnMinimal, btnDark, btnStreets, btnSat].forEach((b) => b?.classList.remove('active'));
+    [btnDark, btnSat, btnStreets].forEach((b) => b?.classList.remove('active'));
     activeBtn?.classList.add('active');
+    if (layerMenu) layerMenu.style.display = 'none';
   };
 
-  btnMinimal?.addEventListener('click', () => switchLayer(TILE_LAYERS.minimal, btnMinimal));
   btnDark?.addEventListener('click', () => switchLayer(TILE_LAYERS.dark, btnDark));
-  btnStreets?.addEventListener('click', () => switchLayer(TILE_LAYERS.streets, btnStreets));
   btnSat?.addEventListener('click', () => switchLayer(TILE_LAYERS.satellite, btnSat));
+  btnStreets?.addEventListener('click', () => switchLayer(TILE_LAYERS.streets, btnStreets));
+
+  document.addEventListener('click', () => {
+    if (layerMenu) layerMenu.style.display = 'none';
+  });
+
+  // Recentralizar / Seguir GPS (Seta Azul Apple)
+  const btnRecenter = document.getElementById('btn-recenter-floating');
+  btnRecenter?.addEventListener('click', () => {
+    playTactileClick();
+    autoFollowUser = true;
+    btnRecenter.classList.add('active-gps');
+    if (map) {
+      map.flyTo([state.currentUser.lat, state.currentUser.lng], 16, { duration: 0.8 });
+    }
+  });
 
   // Botão Centralizar em Manaus
-  document.getElementById('btn-goto-manaus')?.addEventListener('click', goToManaus);
-
-  // Botão Forçar GPS do Aparelho
-  document.getElementById('btn-force-gps')?.addEventListener('click', forceDeviceGPS);
-
-  // Centralizar em Mim / Voltar ao GPS Ao Vivo
-  document.getElementById('btn-center-me')?.addEventListener('click', () => {
+  document.getElementById('btn-goto-manaus')?.addEventListener('click', () => {
     playTactileClick();
-    locationMode = 'gps';
-    autoFollowUser = true;
-    const recenterBtn = document.getElementById('btn-recenter-floating');
-    if (recenterBtn) recenterBtn.style.display = 'none';
-    map.flyTo([state.currentUser.lat, state.currentUser.lng], 16, { duration: 1 });
-    showToast('Seguindo seu celular em tempo real.', 'info');
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        updateCurrentUserPosition(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy, pos.coords.speed ? pos.coords.speed * 3.6 : 0);
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
-    );
+    if (map) map.flyTo([MANAUS_COORDS.lat, MANAUS_COORDS.lng], 14, { duration: 0.8 });
   });
 
-  // Botão Flutuante de Recentralizar / Seguir GPS (Mobile / Desktop)
-  const btnRecenterFloating = document.getElementById('btn-recenter-floating');
-  btnRecenterFloating?.addEventListener('click', () => {
-    playTactileClick();
-    locationMode = 'gps';
-    autoFollowUser = true;
-    btnRecenterFloating.style.display = 'none';
-    map.flyTo([state.currentUser.lat, state.currentUser.lng], 16, { duration: 1 });
-    showToast('Seguindo seu celular em tempo real.', 'info');
-  });
-
-  // Botão Banner Ativar GPS
-  document.getElementById('btn-request-gps-banner')?.addEventListener('click', () => {
-    forceDeviceGPS();
-  });
-
-  // Enquadrar Todos
+  // Enquadrar Todos no Círculo
   document.getElementById('btn-fit-all')?.addEventListener('click', () => {
     playTactileClick();
+    if (!map) return;
     const allCoords = [
       [state.currentUser.lat, state.currentUser.lng],
       ...Array.from(state.members.values()).map((m) => [m.lat, m.lng]),
@@ -1090,153 +892,224 @@ function setupUIEventListeners() {
     map.fitBounds(L.latLngBounds(allCoords), { padding: [60, 60], maxZoom: 16 });
   });
 
-  // Alternar Rastros
-  const btnTrails = document.getElementById('btn-toggle-trails');
-  btnTrails?.addEventListener('click', () => {
+  // Fechar rota ativa
+  document.getElementById('btn-close-route')?.addEventListener('click', clearActiveRoute);
+
+  // Abas da Gaveta (Pessoas vs Lugares)
+  const tabPeople = document.getElementById('tab-btn-people');
+  const tabPlaces = document.getElementById('tab-btn-places');
+  const panelPeople = document.getElementById('panel-people');
+  const panelPlaces = document.getElementById('panel-places');
+
+  tabPeople?.addEventListener('click', () => {
     playTactileClick();
-    showTrails = !showTrails;
-    btnTrails.classList.toggle('active', showTrails);
-
-    trailsMap.forEach((polyline) => {
-      if (showTrails) {
-        polyline.addTo(map);
-      } else {
-        map.removeLayer(polyline);
-      }
-    });
-
-    showToast(showTrails ? 'Rastros ativados' : 'Rastros ocultos', 'info');
+    tabPeople.classList.add('active');
+    tabPlaces?.classList.remove('active');
+    if (panelPeople) panelPeople.style.display = 'flex';
+    if (panelPlaces) panelPlaces.style.display = 'none';
   });
 
-  // Botão Adicionar Marcador / Ponto Personalizado
-  const btnAddCustom = document.getElementById('btn-add-marker-custom');
-  btnAddCustom?.addEventListener('click', () => {
+  tabPlaces?.addEventListener('click', () => {
     playTactileClick();
-    const center = map.getCenter();
-    const name = prompt('Digite o nome do novo ponto/membro:') || 'Novo Ponto';
-    addCustomMember(name, 'Ponto Manual', center.lat, center.lng);
+    tabPlaces.classList.add('active');
+    tabPeople?.classList.remove('active');
+    if (panelPlaces) panelPlaces.style.display = 'flex';
+    if (panelPeople) panelPeople.style.display = 'none';
+  });
+
+  // Botão Rápido + no cabeçalho da gaveta
+  document.getElementById('btn-sheet-quick-add')?.addEventListener('click', () => {
+    if (tabPlaces?.classList.contains('active')) {
+      openPlaceModal();
+    } else {
+      openShareModal();
+    }
+  });
+
+  // Restaurar demonstração / Conectar novo
+  document.getElementById('btn-invite-flow')?.addEventListener('click', openShareModal);
+  document.getElementById('btn-reset-demo')?.addEventListener('click', () => {
+    playTactileClick();
+    resetToDemoMembers();
     updateAllMarkers();
     renderMembersList();
-    showToast(`Ponto "${name}" adicionado no centro do mapa.`, 'info');
+    renderPlacesList();
+    showToast('Familiares de demonstração restaurados.', 'info');
   });
 
-  // ==========================================
-  // BARRA DE BUSCA DE ENDEREÇO / BAIRRO / RUA
-  // ==========================================
+  // Abertura e fechamento de Modais
+  document.getElementById('btn-share-circle')?.addEventListener('click', openShareModal);
+  document.getElementById('btn-circle-info')?.addEventListener('click', openShareModal);
+  document.getElementById('btn-close-share-modal')?.addEventListener('click', closeShareModal);
+
+  document.getElementById('btn-open-notifications-modal')?.addEventListener('click', openNotificationsModal);
+  document.getElementById('btn-close-notifications-modal')?.addEventListener('click', closeNotificationsModal);
+
+  document.getElementById('btn-my-profile')?.addEventListener('click', openProfileModal);
+  document.getElementById('btn-close-profile-modal')?.addEventListener('click', closeProfileModal);
+  document.getElementById('btn-cancel-profile')?.addEventListener('click', closeProfileModal);
+
+  document.getElementById('btn-open-place-modal')?.addEventListener('click', openPlaceModal);
+  document.getElementById('btn-close-place-modal')?.addEventListener('click', closePlaceModal);
+  document.getElementById('btn-cancel-place')?.addEventListener('click', closePlaceModal);
+
+  document.getElementById('btn-close-member-detail')?.addEventListener('click', closeMemberDetailSheet);
+
+  // Salvar Perfil
+  let selectedProfilePhoto = state.currentUser.photo || '';
+  document.querySelectorAll('.avatar-choice-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.avatar-choice-btn').forEach((b) => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedProfilePhoto = btn.getAttribute('data-photo') || '';
+      const preview = document.getElementById('profile-edit-avatar-preview');
+      if (preview) {
+        if (selectedProfilePhoto) {
+          preview.style.backgroundImage = `url('${selectedProfilePhoto}')`;
+          preview.textContent = '';
+        } else {
+          preview.style.backgroundImage = '';
+          preview.textContent = state.currentUser.avatar;
+        }
+      }
+    });
+  });
+
+  document.getElementById('btn-save-profile')?.addEventListener('click', () => {
+    playTactileClick();
+    const nameInput = document.getElementById('input-profile-name');
+    const newName = nameInput?.value.trim() || 'Você';
+    updateUserProfile(newName, selectedProfilePhoto);
+
+    const headerAvatar = document.getElementById('header-user-avatar');
+    if (headerAvatar) {
+      if (state.currentUser.photo) {
+        headerAvatar.style.backgroundImage = `url('${state.currentUser.photo}')`;
+        headerAvatar.textContent = '';
+      } else {
+        headerAvatar.style.backgroundImage = '';
+        headerAvatar.textContent = state.currentUser.avatar;
+      }
+    }
+
+    updateMarkerForMember(state.currentUser);
+    renderMembersList();
+    closeProfileModal();
+    showToast('Perfil atualizado com sucesso!', 'info');
+  });
+
+  // Salvar Lugar
+  let selectedCategory = 'home';
+  let selectedIcon = '🏠';
+  let selectedColor = '#007AFF';
+
+  document.querySelectorAll('.cat-chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      document.querySelectorAll('.cat-chip').forEach((c) => c.classList.remove('active'));
+      chip.classList.add('active');
+      selectedCategory = chip.getAttribute('data-cat') || 'home';
+      selectedIcon = chip.getAttribute('data-icon') || '🏠';
+      selectedColor = chip.getAttribute('data-color') || '#007AFF';
+    });
+  });
+
+  const sliderRadius = document.getElementById('place-radius-slider');
+  const labelRadius = document.getElementById('place-radius-val');
+  sliderRadius?.addEventListener('input', (e) => {
+    if (labelRadius) labelRadius.textContent = `${e.target.value}m`;
+  });
+
+  document.getElementById('btn-save-place')?.addEventListener('click', () => {
+    playTactileClick();
+    const nameInput = document.getElementById('place-name-input');
+    const name = nameInput?.value.trim() || 'Novo Lugar';
+    const radius = parseInt(sliderRadius?.value || '250', 10);
+    const center = map ? map.getCenter() : { lat: state.currentUser.lat, lng: state.currentUser.lng };
+
+    addSavedPlace({
+      id: `place_${Date.now()}`,
+      name,
+      category: selectedCategory,
+      icon: selectedIcon,
+      color: selectedColor,
+      lat: center.lat,
+      lng: center.lng,
+      radius,
+      address: 'Manaus, AM',
+    });
+
+    renderPlaceOverlays();
+    renderPlacesList();
+    closePlaceModal();
+    showToast(`Lugar "${name}" adicionado com sucesso!`, 'geofence');
+  });
+
+  // Botão SOS com confirmação
+  const modalSosConfirm = document.getElementById('modal-sos-confirm');
+  document.getElementById('btn-sos')?.addEventListener('click', () => {
+    playTactileClick();
+    if (state.currentUser.sos) {
+      triggerSOS(); // Desativa direto se já estiver ativo
+    } else if (modalSosConfirm) {
+      modalSosConfirm.style.display = 'flex';
+    }
+  });
+
+  document.getElementById('btn-confirm-sos')?.addEventListener('click', () => {
+    playTactileClick();
+    if (modalSosConfirm) modalSosConfirm.style.display = 'none';
+    triggerSOS();
+  });
+
+  document.getElementById('btn-cancel-sos')?.addEventListener('click', () => {
+    playTactileClick();
+    if (modalSosConfirm) modalSosConfirm.style.display = 'none';
+  });
+
+  document.getElementById('btn-close-sos-confirm')?.addEventListener('click', () => {
+    playTactileClick();
+    if (modalSosConfirm) modalSosConfirm.style.display = 'none';
+  });
+
+  document.getElementById('btn-dismiss-sos')?.addEventListener('click', triggerSOS);
+
+  // Busca de Endereços
   const searchInput = document.getElementById('map-search-input');
-  const searchClear = document.getElementById('btn-search-clear');
   const searchDropdown = document.getElementById('search-dropdown');
-  let searchDebounceTimer = null;
+  let searchTimeout = null;
 
   searchInput?.addEventListener('input', (e) => {
-    const val = e.target.value.trim();
-    if (searchClear) searchClear.style.display = val ? 'block' : 'none';
-
-    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-
-    if (val.length < 2) {
-      if (searchDropdown) {
-        searchDropdown.style.display = 'none';
-        searchDropdown.innerHTML = '';
-      }
+    const query = e.target.value.trim();
+    if (searchTimeout) clearTimeout(searchTimeout);
+    if (!query) {
+      if (searchDropdown) searchDropdown.style.display = 'none';
       return;
     }
 
-    searchDebounceTimer = setTimeout(async () => {
-      // Se não especificou cidade, tenta priorizar Manaus
-      const queryWithCity = val.toLowerCase().includes('manaus') ? val : `${val}, Manaus`;
-      let results = await searchAddress(queryWithCity);
+    searchTimeout = setTimeout(async () => {
+      const results = await searchAddress(query);
+      if (searchDropdown) {
+        searchDropdown.innerHTML = results
+          .map((res) => `<div class="search-item" data-lat="${res.lat}" data-lng="${res.lon}">📍 ${res.display_name}</div>`)
+          .join('');
+        searchDropdown.style.display = results.length > 0 ? 'block' : 'none';
 
-      // Fallback para a busca pura caso não ache na cidade
-      if (results.length === 0) {
-        results = await searchAddress(val);
-      }
-
-      if (results.length === 0) {
-        searchDropdown.innerHTML = `
-          <div style="padding: 10px 14px; font-size: 12px; color: #787774;">
-            Nenhum endereço encontrado para "${val}".
-          </div>
-        `;
-        searchDropdown.style.display = 'flex';
-        return;
-      }
-
-      searchDropdown.innerHTML = results
-        .map(
-          (item) => `
-        <div class="search-result-item" data-lat="${item.lat}" data-lon="${item.lon}">
-          <strong>${item.name || item.display_name.split(',')[0]}</strong>
-          <span>${item.display_name}</span>
-        </div>
-      `
-        )
-        .join('');
-
-      searchDropdown.style.display = 'flex';
-
-      searchDropdown.querySelectorAll('.search-result-item').forEach((itemEl) => {
-        itemEl.addEventListener('click', () => {
-          const lat = parseFloat(itemEl.getAttribute('data-lat'));
-          const lon = parseFloat(itemEl.getAttribute('data-lon'));
-          autoFollowUser = false;
-          map.flyTo([lat, lon], 16, { duration: 1.2 });
-
-          const recenterBtn = document.getElementById('btn-recenter-floating');
-          if (recenterBtn) {
-            const lbl = document.getElementById('recenter-label');
-            if (lbl) lbl.textContent = 'Voltar ao Meu GPS';
-            recenterBtn.style.display = 'inline-flex';
-          }
-
-          searchDropdown.style.display = 'none';
-          searchInput.value = itemEl.querySelector('strong')?.textContent || '';
-          showToast(`Visualizando: ${itemEl.querySelector('strong')?.textContent || 'Local'}`, 'info');
-          playRadarPing();
+        searchDropdown.querySelectorAll('.search-item').forEach((item) => {
+          item.addEventListener('click', () => {
+            const lat = parseFloat(item.getAttribute('data-lat'));
+            const lng = parseFloat(item.getAttribute('data-lng'));
+            if (map && !isNaN(lat) && !isNaN(lng)) {
+              playTactileClick();
+              map.flyTo([lat, lng], 16, { duration: 1 });
+            }
+            searchDropdown.style.display = 'none';
+          });
         });
-      });
+      }
     }, 350);
   });
 
-  searchClear?.addEventListener('click', () => {
-    if (searchInput) searchInput.value = '';
-    searchClear.style.display = 'none';
-    if (searchDropdown) {
-      searchDropdown.style.display = 'none';
-      searchDropdown.innerHTML = '';
-    }
-  });
-
-  // Fecha dropdown ao clicar fora
-  document.addEventListener('click', (e) => {
-    if (!e.target.closest('#map-search-box')) {
-      if (searchDropdown) searchDropdown.style.display = 'none';
-    }
-  });
-
-  // Botão SOS
-  document.getElementById('btn-sos')?.addEventListener('click', () => {
-    triggerSOS();
-  });
-
-  document.getElementById('btn-dismiss-sos')?.addEventListener('click', () => {
-    triggerSOS();
-  });
-
-  // Modal Compartilhar Círculo
-  const modalShare = document.getElementById('modal-share');
-  const btnOpenShare = document.getElementById('btn-share-circle');
-  const btnCloseShare = document.getElementById('btn-close-share-modal');
-  const shareLinkInput = document.getElementById('share-link-input');
-
-  btnOpenShare?.addEventListener('click', openShareModal);
-  document.getElementById('btn-circle-info')?.addEventListener('click', openShareModal);
-  btnCloseShare?.addEventListener('click', () => {
-    playTactileClick();
-    if (modalShare) modalShare.style.display = 'none';
-  });
-
-  // Copiar Código e Link
+  // Copiar Links e Código
   document.getElementById('btn-copy-code')?.addEventListener('click', () => {
     playTactileClick();
     navigator.clipboard.writeText(state.circleId);
@@ -1245,146 +1118,103 @@ function setupUIEventListeners() {
 
   document.getElementById('btn-copy-link')?.addEventListener('click', () => {
     playTactileClick();
-    if (shareLinkInput) {
-      navigator.clipboard.writeText(shareLinkInput.value);
+    const linkInput = document.getElementById('share-link-input');
+    if (linkInput) {
+      navigator.clipboard.writeText(linkInput.value);
       showToast('Link do círculo copiado!', 'info');
     }
   });
 
-  // Modal Nova Cerca Virtual
-  const modalFence = document.getElementById('modal-fence');
-  const btnOpenFence = document.getElementById('btn-open-fence-modal');
-  const btnQuickFence = document.getElementById('btn-add-fence-quick');
-  const btnCloseFence = document.getElementById('btn-close-fence-modal');
-  const btnCancelFence = document.getElementById('btn-cancel-fence');
-  const btnSaveFence = document.getElementById('btn-save-fence');
-  const sliderRadius = document.getElementById('fence-radius-slider');
-  const labelRadius = document.getElementById('fence-radius-val');
-
-  sliderRadius?.addEventListener('input', (e) => {
-    if (labelRadius) labelRadius.textContent = `${e.target.value}m`;
+  // Controles de Notificações
+  document.getElementById('btn-request-notification-perm')?.addEventListener('click', async () => {
+    playTactileClick();
+    try {
+      const res = await requestPushPermission();
+      showToast(res.permission === 'granted' ? 'Notificações autorizadas!' : 'Permissão negada.', 'info');
+      updateNotificationUI();
+    } catch (e) {
+      showToast('Erro: ' + e.message, 'error');
+    }
   });
 
-  let selectedFenceColor = '#1F6C9F';
-  document.querySelectorAll('.color-dot').forEach((dot) => {
-    dot.addEventListener('click', () => {
-      document.querySelectorAll('.color-dot').forEach((d) => d.classList.remove('active'));
-      dot.classList.add('active');
-      selectedFenceColor = dot.getAttribute('data-color') || '#1F6C9F';
-    });
+  document.getElementById('btn-test-notification-now')?.addEventListener('click', async () => {
+    playTactileClick();
+    try {
+      await triggerTestPushNotification({ delaySeconds: 0 });
+      showToast('Notificação enviada!', 'info');
+      updateNotificationUI();
+    } catch (e) {
+      showToast('Erro: ' + e.message, 'error');
+    }
   });
 
-  btnOpenFence?.addEventListener('click', openFenceModal);
-  btnQuickFence?.addEventListener('click', openFenceModal);
-
-  const closeFenceModal = () => {
+  let delayTimer = null;
+  document.getElementById('btn-test-notification-delay')?.addEventListener('click', async () => {
     playTactileClick();
-    if (modalFence) modalFence.style.display = 'none';
-  };
-
-  btnCloseFence?.addEventListener('click', closeFenceModal);
-  btnCancelFence?.addEventListener('click', closeFenceModal);
-
-  btnSaveFence?.addEventListener('click', () => {
-    playTactileClick();
-    const nameInput = document.getElementById('fence-name-input');
-    const name = nameInput?.value.trim() || 'Nova Área Segura';
-    const radius = parseInt(sliderRadius?.value || '350', 10);
-    const center = map.getCenter();
-
-    const newFence = {
-      id: `fence_${Date.now()}`,
-      name: name,
-      lat: center.lat,
-      lng: center.lng,
-      radius: radius,
-      color: selectedFenceColor,
-    };
-
-    state.geofences.push(newFence);
-    renderGeofenceOverlays();
-    closeFenceModal();
-    showToast(`Cerca virtual "${name}" criada com sucesso.`, 'geofence');
+    if (delayTimer) return;
+    try {
+      showToast('Agendado em 5s! Bloqueie a tela do celular agora!', 'info');
+      await triggerTestPushNotification({ delaySeconds: 5 });
+      let sec = 5;
+      const lbl = document.getElementById('btn-delay-text');
+      if (lbl) lbl.textContent = `Disparando em ${sec}s...`;
+      delayTimer = setInterval(() => {
+        sec--;
+        if (sec > 0) {
+          if (lbl) lbl.textContent = `Disparando em ${sec}s...`;
+        } else {
+          clearInterval(delayTimer);
+          delayTimer = null;
+          if (lbl) lbl.textContent = 'Testar em 5s (Bloqueie a Tela)';
+        }
+      }, 1000);
+    } catch (e) {
+      showToast('Erro: ' + e.message, 'error');
+    }
   });
 
   // Mobile Bottom Sheet Drag & Toggle
   const sidebar = document.getElementById('sidebar');
   const sheetHandle = document.getElementById('sheet-handle');
-  const sheetToggle = document.getElementById('btn-sheet-toggle');
-
-  const toggleSheet = () => {
+  sheetHandle?.addEventListener('click', () => {
     sidebar?.classList.toggle('collapsed');
-    const isCollapsed = sidebar?.classList.contains('collapsed');
     playTactileClick();
-
-    const recenterBtn = document.getElementById('btn-recenter-floating');
-    if (recenterBtn && recenterBtn.style.display !== 'none') {
-      recenterBtn.style.bottom = isCollapsed ? '64px' : '44%';
-    }
-  };
-
-  sheetHandle?.addEventListener('click', toggleSheet);
-  sheetToggle?.addEventListener('click', (e) => {
-    e.stopPropagation();
-    toggleSheet();
   });
-
-  // Suporte a swipe por toque no mobile (deslizar para baixo recolhe, para cima expande)
-  let touchStartY = 0;
-  sidebar?.addEventListener('touchstart', (e) => {
-    touchStartY = e.touches[0].clientY;
-  }, { passive: true });
-
-  sidebar?.addEventListener('touchend', (e) => {
-    const touchEndY = e.changedTouches[0].clientY;
-    const diff = touchEndY - touchStartY;
-    if (diff > 45 && !sidebar.classList.contains('collapsed')) {
-      sidebar.classList.add('collapsed');
-      playTactileClick();
-    } else if (diff < -45 && sidebar.classList.contains('collapsed')) {
-      sidebar.classList.remove('collapsed');
-      playTactileClick();
-    }
-  }, { passive: true });
 }
 
 /* =========================================================
-   SINCRONIZAÇÃO CROSS-TAB E INICIALIZAÇÃO
+   SINCRONIZAÇÃO CROSS-TAB E REDE WEBRTC P2P
 ========================================================= */
 function initCrossTabSync() {
   listenToBroadcasts(
-    (memberId) => {
+    () => {
       updateAllMarkers();
       renderMembersList();
-      checkActiveGeofences();
+      renderPlacesList();
+      checkActivePlaces();
     },
     (sosUser) => {
-      showToast(`ALERTA SOS recebido de ${sosUser.name}!`, 'sos');
+      showToast(`ALERTA SOS de ${sosUser.name}!`, 'sos');
       startSOSAlarm();
+      notifySOSAlert(sosUser.name);
     }
   );
 }
 
-/* =========================================================
-   REDE WEBRTC P2P (CELULAR NA RUA <-> COMPUTADOR EM CASA)
-========================================================= */
 function initP2P() {
   p2pEngine = initP2PNetwork({
-    onPeerConnected: (peerId) => {
-      showToast('Dispositivo conectado ao círculo P2P.', 'info');
+    onPeerConnected: () => {
+      showToast('Novo aparelho conectado ao círculo.', 'info');
       playRadarPing();
-      updateP2PHUD();
       renderMembersList();
     },
-    onPeerDisconnected: (peerId) => {
-      showToast('Conexão P2P com dispositivo oscilou. Reconectando...', 'info');
-      updateP2PHUD();
+    onPeerDisconnected: () => {
       renderMembersList();
     },
     onLocationReceived: (remoteUser) => {
       updateMarkerForMember(remoteUser);
       renderMembersList();
-      checkActiveGeofences();
+      checkActivePlaces();
     },
     onPingUpdated: (peerId, rttMs) => {
       const p2pVal = document.getElementById('p2p-status-val');
@@ -1393,75 +1223,30 @@ function initP2P() {
   });
 }
 
-function updateP2PHUD() {
-  const dot = document.getElementById('p2p-dot');
-  const val = document.getElementById('p2p-status-val');
-  const count = p2pEngine ? p2pEngine.getConnectionCount() : 0;
-  if (count > 0) {
-    if (dot) dot.className = 'hud-dot online';
-    if (val) val.textContent = `${count} Online`;
-  } else {
-    if (dot) dot.className = 'hud-dot';
-    if (val) val.textContent = 'Aguardando';
-  }
-}
-
-function setupNetworkStatusListeners() {
-  const handleNetworkChange = () => {
-    const isOnline = navigator.onLine;
-    const hudDot = document.querySelector('#hud-user-status .hud-dot');
-    const hudGpsStatus = document.getElementById('hud-gps-status');
-    const p2pVal = document.getElementById('p2p-status-val');
-
-    if (isOnline) {
-      if (hudDot) hudDot.className = 'hud-dot online pulse-live';
-      if (hudGpsStatus) {
-        hudGpsStatus.innerHTML = '<span class="live-tag-mini">AO VIVO</span> GPS Satélite';
-      }
-      showToast('Conexão com a internet restabelecida!', 'info');
-      if (state.currentUser.lat && state.currentUser.lng) {
-        throttledReverseGeocode(state.currentUser.lat, state.currentUser.lng);
-      }
-      renderMembersList();
-    } else {
-      if (hudDot) hudDot.className = 'hud-dot warning pulse-live';
-      if (hudGpsStatus) {
-        hudGpsStatus.innerHTML = '<span class="live-tag-offline">OFFLINE</span> Satélite Ativo';
-      }
-      if (p2pVal) p2pVal.textContent = 'Modo Offline';
-      showToast('Modo Offline: O GPS continua ativo diretamente via satélite!', 'info');
-      renderMembersList();
-    }
-  };
-
-  window.addEventListener('online', handleNetworkChange);
-  window.addEventListener('offline', handleNetworkChange);
-}
-
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .register('/sw.js')
         .then((reg) => {
-          console.log('[SW] Service Worker registrado para funcionamento offline:', reg.scope);
+          reg.update();
+          updateNotificationUI();
         })
-        .catch((err) => {
-          console.warn('[SW] Falha ao registrar Service Worker:', err);
-        });
+        .catch(() => {});
     });
   }
 }
 
 // BOOTSTRAP DA APLICAÇÃO
 document.addEventListener('DOMContentLoaded', () => {
+  initAppState();
   initMap();
   startGeolocationTracking();
-  setupNetworkStatusListeners();
   registerServiceWorker();
   renderMembersList();
-  renderGeofencesSidebarList();
+  renderPlacesList();
   setupUIEventListeners();
   initCrossTabSync();
   initP2P();
+  updateNotificationUI();
 });

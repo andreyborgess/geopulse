@@ -1,6 +1,6 @@
-// GeoPulse - Service Worker para Funcionamento Offline Total (PWA)
-const CACHE_NAME = 'geopulse-app-v3';
-const TILE_CACHE_NAME = 'geopulse-tiles-v1';
+// GeoPulse 2.0 - Service Worker v8 (Offline PWA, Map Tile Caching & Web Push APNs/FCM)
+const CACHE_NAME = 'geopulse-app-v8';
+const TILE_CACHE_NAME = 'geopulse-tiles-v4';
 
 const STATIC_ASSETS = [
   '/',
@@ -13,7 +13,9 @@ const STATIC_ASSETS = [
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
+      return cache.addAll(STATIC_ASSETS).catch((err) => {
+        console.warn('[SW] Cache addAll parcial:', err);
+      });
     })
   );
   self.skipWaiting();
@@ -24,7 +26,9 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
+          // Limpa caches antigos (incluindo v1..v5 com tiles CartoDB ou SVGs corrompidos)
           if (key !== CACHE_NAME && key !== TILE_CACHE_NAME) {
+            console.log('[SW] Purgando cache antigo:', key);
             return caches.delete(key);
           }
         })
@@ -37,71 +41,171 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // 1. Interceptação e Cache de Tiles de Mapa (OpenStreetMap, Esri ArcGIS, etc.)
-  if (
+  // Ignora requisições que não sejam HTTP/HTTPS (ex: chrome-extension, peerjs, webrtc)
+  if (!event.request.url.startsWith('http')) {
+    return;
+  }
+
+  // 1. Tiles de Mapa (OpenStreetMap, Esri ArcGIS - 100% Livres de API Key)
+  const isMapTile =
     url.hostname.includes('tile.openstreetmap.org') ||
     url.hostname.includes('arcgisonline.com') ||
     url.pathname.includes('/tile/') ||
-    (event.request.destination === 'image' && (url.hostname.includes('osm') || url.hostname.includes('esri')))
-  ) {
+    url.pathname.includes('/tiles/');
+
+  if (isMapTile) {
     event.respondWith(
-      caches.open(TILE_CACHE_NAME).then(async (cache) => {
-        const cachedResponse = await cache.match(event.request);
-        if (cachedResponse) {
-          return cachedResponse;
-        }
+      (async () => {
+        const cache = await caches.open(TILE_CACHE_NAME);
+        
+        // Tenta rede primeiro para manter o mapa atualizado
         try {
-          const networkResponse = await fetch(event.request, { mode: 'cors' });
-          if (networkResponse && networkResponse.status === 200) {
+          // Imagens Leaflet usam mode no-cors. Nunca forçar mode: 'cors'.
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && (networkResponse.status === 200 || networkResponse.type === 'opaque')) {
             cache.put(event.request, networkResponse.clone());
           }
           return networkResponse;
         } catch (err) {
-          // Se estiver offline e o tile específico não estiver em cache, retorna tile escuro tático padrão
-          return new Response(
-            '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><rect width="256" height="256" fill="#0A0F1D"/><path d="M0 0 L256 256 M256 0 L0 256" stroke="rgba(255,255,255,0.03)" stroke-width="1"/></svg>',
-            { headers: { 'Content-Type': 'image/svg+xml' } }
-          );
+          // Se estiver offline ou falhar na rede, tenta o cache local
+          const cachedResponse = await cache.match(event.request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // Se não tiver no cache e estiver offline, retorna 404 limpo
+          return new Response('', { status: 404, statusText: 'Tile Not In Cache' });
         }
-      })
+      })()
     );
     return;
   }
 
-  // 2. Navegação da Aplicação (index.html)
+  // 2. Navegação (HTML principal para PWA offline)
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(async () => {
-        const cache = await caches.open(CACHE_NAME);
-        const cached = await cache.match('/index.html') || await cache.match('/');
-        return cached;
-      })
+      (async () => {
+        try {
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.status === 200) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(event.request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch (err) {
+          const cache = await caches.open(CACHE_NAME);
+          const cached = (await cache.match('/index.html')) || (await cache.match('/'));
+          if (cached) return cached;
+          throw err;
+        }
+      })()
     );
     return;
   }
 
-  // 3. Recursos Estáticos (Scripts, Estilos, Fontes, Imagens)
+  // 3. Recursos Estáticos da Aplicação (CSS, JS, Fontes, SVGs)
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (
-            networkResponse &&
-            networkResponse.status === 200 &&
-            (event.request.url.startsWith('http://') || event.request.url.startsWith('https://')) &&
-            event.request.method === 'GET'
-          ) {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          }
-          return networkResponse;
-        })
-        .catch(() => {
-          return cached;
-        });
+    (async () => {
+      // Para assets locais ou com hash (ex: /assets/index-xxx.js), tenta cache primeiro
+      const cachedResponse = await caches.match(event.request);
+      if (cachedResponse) {
+        // Busca na rede em segundo plano para manter cache atualizado (stale-while-revalidate)
+        fetch(event.request)
+          .then(async (networkResponse) => {
+            if (networkResponse && networkResponse.status === 200 && event.request.method === 'GET') {
+              const cache = await caches.open(CACHE_NAME);
+              cache.put(event.request, networkResponse);
+            }
+          })
+          .catch(() => {});
+        return cachedResponse;
+      }
+
+      // Se não estiver em cache, busca na rede
+      try {
+        const networkResponse = await fetch(event.request);
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          event.request.method === 'GET'
+        ) {
+          const cache = await caches.open(CACHE_NAME);
+          cache.put(event.request, networkResponse.clone());
+        }
+        return networkResponse;
+      } catch (err) {
+        return cachedResponse || new Response('Offline', { status: 503 });
+      }
+    })()
+  );
+});
+
+// =========================================================
+// 4. SUPORTE A NOTIFICAÇÕES PUSH NATIVAS (APNs / FCM / Web Push)
+// =========================================================
+
+// Evento disparado quando o backend envia uma notificação via APNs/FCM
+self.addEventListener('push', (event) => {
+  let data = {
+    title: 'Teste do backend até os aparelhos...',
+    body: 'B6\nEnviado pelo backend de staging via APNs/FCM. Este é um teste de recebimento.',
+    icon: '/icon.svg',
+    badge: '/icon.svg',
+    tag: 'geopulse-staging-test',
+    data: { url: '/' }
+  };
+
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      data = Object.assign({}, data, parsed);
+    } catch (e) {
+      data.body = event.data.text();
+    }
+  }
+
+  const notificationOptions = {
+    body: data.body,
+    icon: data.icon || '/icon.svg',
+    badge: data.badge || '/icon.svg',
+    tag: data.tag || ('geopulse-' + Date.now()),
+    vibrate: [200, 100, 200, 100, 200],
+    data: data.data || { url: '/' },
+    requireInteraction: false
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, notificationOptions)
+  );
+});
+
+// Evento disparado quando o usuário toca ou clica na notificação na tela de bloqueio
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const targetUrl = (event.notification.data && event.notification.data.url) ? event.notification.data.url : '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      // Se houver janela aberta do app, foca nela
+      for (const client of windowClients) {
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      // Se estiver fechado, abre a aplicação
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
     })
   );
 });
+
+// Listener para disparos agendados vindos da interface do app (para testar tela bloqueada com delay)
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SCHEDULE_NOTIFICATION') {
+    const { title, options, delayMs } = event.data;
+    setTimeout(() => {
+      self.registration.showNotification(title, options);
+    }, delayMs || 0);
+  }
+});
+

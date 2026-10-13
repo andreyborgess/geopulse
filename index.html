@@ -3,107 +3,98 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#05070B" />
+    <meta name="theme-color" content="#0B0F19" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="description" content="GeoPulse - Central de monitoramento tático e rastreamento em tempo real." />
+    <meta name="description" content="GeoPulse - Localização em tempo real, lugares salvos e segurança para círculos e famílias." />
     
-    <title>GeoPulse | Central de Monitoramento Tático</title>
+    <title>GeoPulse | Círculo Familiar & Localização</title>
     
     <!-- PWA Manifest & Favicon -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="apple-touch-icon" href="/icon.svg" />
 
-    <!-- Google Fonts: Geist Sans & Geist Mono (Protocol: minimalist-ui) -->
+    <!-- Google Fonts: Geist Sans & Geist Mono -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="./node_modules/leaflet/dist/leaflet.css" />
   </head>
   <body>
-    <!-- Ambient Film-Grain Noise Texture (High-End Tactile Depth) -->
+    <!-- Subtle Ambient Noise Texture -->
     <div class="ambient-noise-overlay" aria-hidden="true"></div>
 
     <div id="app">
-      <!-- TOP NAV BAR (Floating Island & Double-Bezel Architecture) -->
-      <header class="app-header-shell">
-        <div class="app-header-core">
+      <!-- HEADER FLUTUANTE ESTILO APPLE -->
+      <header class="apple-header-shell">
+        <div class="apple-header-core">
+          
+          <!-- Seletor de Círculo / Família -->
           <div class="header-left">
-            <div class="brand">
-              <div class="brand-radar">
-                <span class="radar-dot"></span>
-                <span class="radar-ping"></span>
-              </div>
-              <div class="brand-text">
-                <span class="brand-title">GeoPulse</span>
-                <span class="brand-badge">CENTRAL TÁTICA</span>
-              </div>
-            </div>
-
-            <div class="circle-selector-chip" id="btn-circle-info" title="Informações do Círculo Tático">
-              <span class="chip-icon-box">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <button class="circle-selector-pill" id="btn-circle-info" title="Trocar ou gerenciar círculo">
+              <span class="circle-icon-badge">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="16" height="16">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                   <circle cx="9" cy="7" r="4"></circle>
                   <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
                   <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
                 </svg>
               </span>
-              <span id="header-circle-name">Setor Alfa · Manaus</span>
-              <span class="member-count-badge" id="header-member-count">1</span>
+              <div class="circle-text-meta">
+                <span class="circle-name-text" id="header-circle-name">Família Silva</span>
+                <span class="circle-member-badge" id="header-member-count">4</span>
+              </div>
+              <svg class="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Barra de Busca Central -->
+          <div class="header-center">
+            <div class="map-search-bar" id="map-search-box">
+              <div class="search-input-wrap">
+                <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="map-search-input" placeholder="Buscar pessoas, ruas ou lugares..." autocomplete="off" />
+                <button class="btn-search-clear" id="btn-search-clear" style="display: none;" title="Limpar busca">&times;</button>
+              </div>
+              <div class="search-dropdown" id="search-dropdown" style="display: none;"></div>
             </div>
           </div>
 
+          <!-- Ações Rápidas à Direita -->
           <div class="header-actions">
-            <!-- Botão Manaus -->
-            <button class="btn btn-secondary" id="btn-goto-manaus" title="Centralizar em Manaus">
-              <span class="btn-text">Manaus</span>
-              <span class="btn-icon-wrapper">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
-                  <circle cx="12" cy="10" r="3"></circle>
-                </svg>
-              </span>
+            <!-- Botão Conectar P2P / Convidar -->
+            <button class="btn-apple-icon" id="btn-share-circle" title="Convidar aparelhos para o círculo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
+                <polyline points="16 6 12 2 8 6"></polyline>
+                <line x1="12" y1="2" x2="12" y2="15"></line>
+              </svg>
             </button>
 
-            <!-- Botão Adicionar Marcador -->
-            <button class="btn btn-secondary" id="btn-add-marker-custom" title="Adicionar um ponto no mapa">
-              <span class="btn-text">Novo Ponto</span>
-              <span class="btn-icon-wrapper">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <line x1="12" y1="5" x2="12" y2="19"></line>
-                  <line x1="5" y1="12" x2="19" y2="12"></line>
-                </svg>
-              </span>
+            <!-- Botão Central de Notificações Push & APNs -->
+            <button class="btn-apple-icon" id="btn-open-notifications-modal" title="Central de Notificações Push & APNs">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span class="header-notif-dot" id="header-notif-dot"></span>
             </button>
 
-            <!-- Botão Conectar P2P -->
-            <button class="btn btn-secondary" id="btn-share-circle" title="Convidar aparelhos para o círculo">
-              <span class="btn-text">Conectar P2P</span>
-              <span class="btn-icon-wrapper">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <circle cx="18" cy="5" r="3"></circle>
-                  <circle cx="6" cy="12" r="3"></circle>
-                  <circle cx="18" cy="19" r="3"></circle>
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
-                </svg>
-              </span>
+            <!-- Botão SOS com Proteção Segura -->
+            <button class="btn-apple-sos" id="btn-sos" title="Alerta de Emergência SOS">
+              <span class="sos-icon-ring">!</span>
+              <span class="sos-label-text">SOS</span>
             </button>
 
-            <!-- Botão SOS Alerta -->
-            <button class="btn btn-danger" id="btn-sos" title="Acionar Alerta de Emergência SOS">
-              <span class="btn-text">Alerta SOS</span>
-              <span class="btn-icon-wrapper">
-                <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <polygon points="7.86 2 16.14 2 22 7.86 22 16.14 16.14 22 7.86 22 2 16.14 2 7.86 7.86 2"></polygon>
-                  <line x1="12" y1="8" x2="12" y2="12"></line>
-                  <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-              </span>
+            <!-- Avatar Meu Perfil -->
+            <button class="btn-profile-avatar" id="btn-my-profile" title="Meu Perfil e Ajustes">
+              <span class="profile-avatar-img" id="header-user-avatar">VC</span>
+              <span class="profile-status-dot online"></span>
             </button>
           </div>
         </div>
@@ -116,18 +107,33 @@
           <div class="gps-banner-body">
             <span class="gps-banner-icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="8" x2="12" y2="12"></line>
-                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
               </svg>
             </span>
             <div class="gps-banner-text">
               <strong>Permitir Localização do Celular</strong>
-              <span>Ative o GPS para atualizar em tempo real seu posicionamento no mapa.</span>
+              <span>Ative o GPS para acompanhar você e sua família no mapa em tempo real.</span>
             </div>
-            <button class="btn btn-primary btn-sm" id="btn-request-gps-banner">
+            <button class="btn-apple-action btn-sm" id="btn-request-gps-banner">
               <span>Ativar GPS</span>
             </button>
+          </div>
+        </div>
+
+        <!-- Banner de Rota Ativa -->
+        <div class="active-route-banner" id="active-route-banner" style="display: none;">
+          <div class="route-banner-content">
+            <div class="route-banner-info">
+              <span class="route-icon">🚗</span>
+              <div>
+                <strong id="route-dest-name">Rota até Mariana</strong>
+                <span id="route-meta-text">3.2 km · ~8 min no trânsito</span>
+              </div>
+            </div>
+            <div class="route-banner-actions">
+              <button class="btn-route-ext" id="btn-route-google" title="Abrir no Google Maps">Google Maps</button>
+              <button class="btn-route-close" id="btn-close-route" title="Encerrar rota">&times;</button>
+            </div>
           </div>
         </div>
 
@@ -135,263 +141,474 @@
         <div id="map-wrapper">
           <div id="map"></div>
 
-          <!-- Botão Flutuante de Recentralizar / Seguir GPS (Padrão Uber/Maps) -->
-          <button class="btn-floating-recenter" id="btn-recenter-floating" style="display: none;" title="Centralizar e seguir meu celular">
-            <span class="recenter-pulse-dot"></span>
-            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
-            </svg>
-            <span id="recenter-label">Seguir Meu GPS</span>
-          </button>
-
-          <!-- MAP OVERLAYS -->
-          <!-- HUD Superior com Double-Bezel -->
-          <div class="map-hud-shell">
-            <div class="map-hud-core" id="map-hud-top">
-              <div class="hud-item" id="hud-user-status">
-                <span class="hud-dot online pulse-live"></span>
-                <span class="hud-label">GPS</span>
-                <strong class="hud-val" id="hud-gps-status">Localizando...</strong>
-              </div>
-              <div class="hud-item">
-                <span class="hud-label">Precisão</span>
-                <strong class="hud-val" id="hud-accuracy">-- m</strong>
-              </div>
-              <div class="hud-item">
-                <span class="hud-label">Velocidade</span>
-                <strong class="hud-val" id="hud-speed">0 km/h</strong>
-              </div>
-              <div class="hud-item">
-                <span class="hud-label">Bateria</span>
-                <strong class="hud-val" id="hud-battery">88%</strong>
-              </div>
-              <div class="hud-item" id="hud-p2p-item">
-                <span class="hud-dot" id="p2p-dot"></span>
-                <span class="hud-label">Rede</span>
-                <strong class="hud-val" id="p2p-status-val">P2P Pronto</strong>
-              </div>
-            </div>
-          </div>
-
-          <!-- Barra de Busca de Endereço com Double-Bezel -->
-          <div class="map-search-bar" id="map-search-box">
-            <div class="search-shell">
-              <div class="search-input-wrap">
-                <span class="search-icon-box">
-                  <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="11" cy="11" r="8"></circle>
-                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                  </svg>
-                </span>
-                <input type="text" id="map-search-input" placeholder="Buscar rua, bairro ou local em Manaus..." autocomplete="off" />
-                <button class="btn-search-clear" id="btn-search-clear" style="display: none;" title="Limpar busca">&times;</button>
-              </div>
-            </div>
-            <div class="search-dropdown" id="search-dropdown" style="display: none;"></div>
-          </div>
-
-          <!-- Camadas do mapa em Double-Bezel Capsule -->
-          <div class="ctrl-group-shell" id="layer-switcher-capsule">
-            <div class="map-control-group">
-              <button class="btn-ctrl active" id="btn-layer-dark" title="Modo Escuro Tático">
-                <span>Dark</span>
-              </button>
-              <button class="btn-ctrl" id="btn-layer-minimal" title="Modo Editorial Minimalista">
-                <span>Minimal</span>
-              </button>
-              <button class="btn-ctrl" id="btn-layer-streets" title="Modo Ruas">
-                <span>Ruas</span>
-              </button>
-              <button class="btn-ctrl" id="btn-layer-satellite" title="Modo Satélite">
-                <span>Satélite</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Coluna de Ações Rápidas do Mapa -->
-          <div class="map-control-column" id="map-quick-tools">
-            <button class="btn-icon-float" id="btn-force-gps" title="Obter localização do GPS do aparelho">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="2" y1="12" x2="6" y2="12"></line>
-                <line x1="18" y1="12" x2="22" y2="12"></line>
-                <line x1="12" y1="2" x2="12" y2="6"></line>
-                <line x1="12" y1="18" x2="12" y2="22"></line>
+          <!-- Controles Flutuantes Estilo Apple Maps (À Direita) -->
+          <div class="apple-map-controls">
+            <!-- Seletor de Camada -->
+            <button class="btn-map-control" id="btn-layer-toggle" title="Alterar Camada do Mapa">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                <polyline points="2 17 12 22 22 17"></polyline>
+                <polyline points="2 12 12 17 22 12"></polyline>
               </svg>
             </button>
-            <button class="btn-icon-float" id="btn-center-me" title="Centralizar no Ponto Central VC">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <div class="layer-popup-menu" id="layer-popup-menu" style="display: none;">
+              <button class="layer-opt active" id="btn-layer-dark">
+                <span>Modo Escuro</span>
+              </button>
+              <button class="layer-opt" id="btn-layer-satellite">
+                <span>Satélite Real</span>
+              </button>
+              <button class="layer-opt" id="btn-layer-streets">
+                <span>Ruas Clássico</span>
+              </button>
+            </div>
+
+            <!-- Centralizar em Manaus -->
+            <button class="btn-map-control" id="btn-goto-manaus" title="Centralizar em Manaus">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="12 8 8 12 12 16 12 8"></polygon>
+              </svg>
+            </button>
+
+            <!-- Enquadrar Todos no Círculo -->
+            <button class="btn-map-control" id="btn-fit-all" title="Ver Todos no Mapa">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+              </svg>
+            </button>
+
+            <!-- Seguir Meu GPS (Seta Azul Apple) -->
+            <button class="btn-map-control active-gps" id="btn-recenter-floating" title="Seguir meu celular ao vivo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
               </svg>
             </button>
-            <button class="btn-icon-float" id="btn-fit-all" title="Enquadrar Todos os Vetores">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <circle cx="12" cy="12" r="3"></circle>
-              </svg>
-            </button>
-            <button class="btn-icon-float" id="btn-toggle-trails" title="Alternar Rastro de Deslocamento">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
-              </svg>
-            </button>
-            <button class="btn-icon-float" id="btn-add-fence-quick" title="Criar Nova Cerca Virtual Aqui">
-              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-              </svg>
-            </button>
+          </div>
+
+          <!-- Telemetria Flutuante Discreta (Rodapé do Mapa) -->
+          <div class="map-status-pill" id="map-status-pill">
+            <span class="live-dot pulse"></span>
+            <span id="hud-gps-status">GPS Conectado</span>
+            <span class="pill-divider">·</span>
+            <span id="hud-battery">88%</span>
+            <span class="pill-divider">·</span>
+            <span id="p2p-status-val">Rede Ativa</span>
           </div>
         </div>
 
-        <!-- SIDEBAR / BOTTOM SHEET DE MEMBROS -->
-        <aside class="sidebar" id="sidebar">
-          <div class="sidebar-drag-handle" id="sheet-handle"></div>
+        <!-- GAVETA INFERIOR / SIDEBAR ESTILO APPLE FIND MY -->
+        <aside class="apple-sheet" id="sidebar">
+          <div class="sheet-drag-handle" id="sheet-handle"></div>
 
-          <div class="sidebar-header" id="sidebar-header-toggle">
-            <div class="sidebar-title-row">
-              <div class="title-with-badge">
-                <h3>Vetores no Radar</h3>
-                <span class="live-pill" id="sidebar-live-pill">
-                  <span class="status-dot"></span>
-                  Tempo Real
-                </span>
-              </div>
-              <div class="sidebar-header-actions">
-                <button class="btn-text-danger" id="btn-clear-all-members" style="display: none;" title="Excluir todos os pontos manuais">Limpar Pontos</button>
-                <button class="btn-sheet-toggle" id="btn-sheet-toggle" title="Minimizar ou Expandir Painel">
-                  <svg class="icon chevron-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polyline points="6 9 12 15 18 9"></polyline>
-                  </svg>
-                </button>
-              </div>
+          <!-- Cabeçalho da Gaveta com Abas -->
+          <div class="sheet-tabs-row">
+            <div class="sheet-tabs">
+              <button class="sheet-tab active" id="tab-btn-people">
+                <span>Pessoas</span>
+                <span class="tab-badge" id="tab-badge-people">4</span>
+              </button>
+              <button class="sheet-tab" id="tab-btn-places">
+                <span>Lugares</span>
+                <span class="tab-badge" id="tab-badge-places">3</span>
+              </button>
             </div>
-            <p class="sidebar-subtitle">Centro de comando e telemetria de precisão em tempo real</p>
-          </div>
 
-          <!-- Lista de Membros -->
-          <div class="members-container" id="members-list">
-            <!-- Renderizado dinamicamente via JavaScript -->
-          </div>
-
-          <!-- Cercas Virtuais & Zonas Seguras -->
-          <div class="geofences-section">
-            <div class="section-header-row">
-              <h4>Cercas Virtuais</h4>
-              <button class="btn-text-action" id="btn-open-fence-modal">+ Adicionar Área</button>
-            </div>
-            <div class="geofence-list" id="geofences-list">
-              <!-- Renderizado dinamicamente -->
+            <div class="sheet-actions">
+              <button class="btn-sheet-action" id="btn-sheet-quick-add" title="Adicionar">+</button>
             </div>
           </div>
 
-          <!-- Nota Técnica Utilitária -->
-          <div class="interactive-tip">
-            <span class="tip-icon-box">
-              <svg class="tip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <line x1="12" y1="16" x2="12" y2="12"></line>
-                <line x1="12" y1="8" x2="12.01" y2="8"></line>
-              </svg>
-            </span>
-            <span>Rastreamento contínuo em tempo real via satélite (GNSS). Funciona online e offline com bússola digital e armazenamento local de telemetria.</span>
+          <!-- Conteúdo da Aba 1: Pessoas -->
+          <div class="sheet-content-panel active" id="panel-people">
+            <div class="members-cards-container" id="members-list">
+              <!-- Renderizado dinamicamente via JavaScript -->
+            </div>
+
+            <!-- Ações do Círculo na base -->
+            <div class="sheet-footer-tools">
+              <button class="btn-subtle-link" id="btn-invite-flow">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Conectar Novo Aparelho</span>
+              </button>
+              <button class="btn-subtle-link text-muted" id="btn-reset-demo">
+                <span>Restaurar Demonstração</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Conteúdo da Aba 2: Lugares Salvos -->
+          <div class="sheet-content-panel" id="panel-places" style="display: none;">
+            <div class="places-cards-container" id="places-list">
+              <!-- Renderizado dinamicamente via JavaScript -->
+            </div>
+
+            <div class="sheet-footer-tools">
+              <button class="btn-subtle-link" id="btn-open-place-modal">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Adicionar Novo Lugar</span>
+              </button>
+            </div>
           </div>
         </aside>
       </main>
 
-      <!-- MODAL COMPARTILHAR CÍRCULO (Double-Bezel Hardware Card) -->
-      <div class="modal-backdrop" id="modal-share" style="display: none;">
+      <!-- FICHA COMPLETA DE DETALHES DO MEMBRO (MEMBER DETAIL SHEET) -->
+      <div class="member-detail-sheet-backdrop" id="member-detail-sheet" style="display: none;">
+        <div class="member-detail-card">
+          <div class="member-sheet-header">
+            <div class="member-sheet-avatar-wrap">
+              <div class="member-sheet-avatar" id="detail-avatar">MS</div>
+              <span class="member-sheet-status-dot online" id="detail-dot"></span>
+            </div>
+            <div class="member-sheet-title-info">
+              <h2 id="detail-name">Mariana Silva</h2>
+              <span class="detail-relation" id="detail-relation">Esposa · Família Silva</span>
+            </div>
+            <button class="btn-sheet-close" id="btn-close-member-detail" title="Fechar">&times;</button>
+          </div>
+
+          <!-- Status de Atividade Orgânico -->
+          <div class="member-activity-card">
+            <div class="activity-icon-box" id="detail-activity-icon">🏠</div>
+            <div class="activity-text">
+              <strong id="detail-activity-text">Em Casa</strong>
+              <span id="detail-address">Adrianópolis, Manaus</span>
+            </div>
+          </div>
+
+          <!-- Grade de Informações de Telemetria -->
+          <div class="member-telemetry-grid">
+            <div class="telemetry-box">
+              <span class="telemetry-label">Bateria</span>
+              <strong class="telemetry-val" id="detail-battery">88%</strong>
+            </div>
+            <div class="telemetry-box">
+              <span class="telemetry-label">Velocidade</span>
+              <strong class="telemetry-val" id="detail-speed">0 km/h</strong>
+            </div>
+            <div class="telemetry-box">
+              <span class="telemetry-label">Distância</span>
+              <strong class="telemetry-val" id="detail-distance">3.2 km</strong>
+            </div>
+            <div class="telemetry-box">
+              <span class="telemetry-label">Atualizado</span>
+              <strong class="telemetry-val" id="detail-updated">Há 4 min</strong>
+            </div>
+          </div>
+
+          <!-- Grid de Ações Estilo Apple -->
+          <div class="member-actions-grid">
+            <button class="btn-apple-action primary" id="btn-action-route">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
+              </svg>
+              <span>Traçar Rota</span>
+            </button>
+
+            <button class="btn-apple-action secondary" id="btn-action-ping">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+              </svg>
+              <span>Tocar Som</span>
+            </button>
+
+            <button class="btn-apple-action secondary" id="btn-action-notify">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span>Avisar ao Sair</span>
+            </button>
+
+            <button class="btn-apple-action secondary" id="btn-action-external-maps">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                <polyline points="15 3 21 3 21 9"></polyline>
+                <line x1="10" y1="14" x2="21" y2="3"></line>
+              </svg>
+              <span>Google Maps</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL MEU PERFIL -->
+      <div class="modal-backdrop" id="modal-profile" style="display: none;">
         <div class="modal-card-shell">
           <div class="modal-card-core">
             <div class="modal-header">
               <div class="modal-header-info">
-                <span class="modal-eyebrow">REDE WEBRTC P2P</span>
-                <h3>Conectar Aparelho ao Círculo</h3>
+                <span class="modal-eyebrow">MEU PERFIL</span>
+                <h3>Ajustes do Usuário</h3>
               </div>
-              <button class="modal-close" id="btn-close-share-modal" title="Fechar">&times;</button>
+              <button class="modal-close" id="btn-close-profile-modal" title="Fechar">&times;</button>
             </div>
             <div class="modal-body">
-              <p class="modal-desc">Escaneie o código para emparelhar diretamente via conexão WebRTC P2P ponto a ponto, sem depender de banco de dados.</p>
-
-              <div class="circle-code-display">
-                <div class="code-info">
-                  <span class="code-label">IDENTIFICADOR DO CÍRCULO</span>
-                  <strong class="code-val" id="modal-circle-code">RADAR-01</strong>
+              <div class="profile-preview-row">
+                <div class="profile-preview-avatar" id="profile-edit-avatar-preview">VC</div>
+                <div>
+                  <strong id="profile-edit-name-preview">Você</strong>
+                  <span class="profile-edit-meta">Aparelho ativo neste navegador</span>
                 </div>
-                <button class="btn btn-secondary btn-sm" id="btn-copy-code" title="Copiar Código">
-                  <span>Copiar</span>
-                </button>
               </div>
 
-              <!-- QR Code em SVG Gerado -->
-              <div class="qr-preview-box">
-                <div id="qr-container"></div>
-                <span class="qr-hint">Aponte a câmera do celular para conectar instantaneamente</span>
+              <div class="form-group">
+                <label for="input-profile-name">Seu Nome de Exibição</label>
+                <input type="text" id="input-profile-name" value="Você" placeholder="Ex: André Silva" />
               </div>
 
-              <div class="share-link-row">
-                <input type="text" id="share-link-input" readonly value="" />
-                <button class="btn btn-primary" id="btn-copy-link">
-                  <span class="btn-text">Copiar Link</span>
-                  <span class="btn-icon-wrapper">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                  </span>
-                </button>
+              <div class="form-group">
+                <label>Foto ou Avatar</label>
+                <div class="avatar-choices-row">
+                  <button type="button" class="avatar-choice-btn active" data-photo="">VC (Monograma)</button>
+                  <button type="button" class="avatar-choice-btn" data-photo="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80">Foto 1</button>
+                  <button type="button" class="avatar-choice-btn" data-photo="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80">Foto 2</button>
+                </div>
+              </div>
+
+              <div class="modal-actions">
+                <button class="btn-apple-action secondary" id="btn-cancel-profile">Cancelar</button>
+                <button class="btn-apple-action primary" id="btn-save-profile">Salvar Alterações</button>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- MODAL CRIAR CERCA VIRTUAL (Double-Bezel Hardware Card) -->
-      <div class="modal-backdrop" id="modal-fence" style="display: none;">
+      <!-- MODAL ADICIONAR LUGAR SALVO -->
+      <div class="modal-backdrop" id="modal-place" style="display: none;">
         <div class="modal-card-shell">
           <div class="modal-card-core">
             <div class="modal-header">
               <div class="modal-header-info">
-                <span class="modal-eyebrow">GEOPERÍMETRO</span>
-                <h3>Nova Cerca Virtual</h3>
+                <span class="modal-eyebrow">LUGARES SALVOS</span>
+                <h3>Novo Lugar Familiar</h3>
               </div>
-              <button class="modal-close" id="btn-close-fence-modal" title="Fechar">&times;</button>
+              <button class="modal-close" id="btn-close-place-modal" title="Fechar">&times;</button>
             </div>
             <div class="modal-body">
-              <p class="modal-desc">Delimite um raio geográfico ao redor do ponto central para monitorar eventos de entrada e saída.</p>
+              <p class="modal-desc">Cadastre um local frequente para receber alertas de chegada e saída do círculo.</p>
 
               <div class="form-group">
-                <label for="fence-name-input">Identificação da Área</label>
-                <input type="text" id="fence-name-input" placeholder="Ex: Residência, Escritório, Galpão" value="Ponto Seguro" />
+                <label>Categoria do Lugar</label>
+                <div class="category-chips-row">
+                  <button type="button" class="cat-chip active" data-cat="home" data-icon="🏠" data-color="#007AFF">🏠 Casa</button>
+                  <button type="button" class="cat-chip" data-cat="work" data-icon="💼" data-color="#5856D6">💼 Trabalho</button>
+                  <button type="button" class="cat-chip" data-cat="school" data-icon="🎓" data-color="#34C759">🎓 Escola</button>
+                  <button type="button" class="cat-chip" data-cat="gym" data-icon="🏋️" data-color="#FF9500">🏋️ Academia</button>
+                  <button type="button" class="cat-chip" data-cat="spot" data-icon="📍" data-color="#FF2D55">📍 Ponto</button>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="place-name-input">Nome do Lugar</label>
+                <input type="text" id="place-name-input" placeholder="Ex: Casa da Vovó, Escritório Centro" value="Novo Lugar" />
               </div>
 
               <div class="form-group">
                 <div class="label-row">
-                  <label for="fence-radius-slider">Raio do Perímetro</label>
-                  <strong class="slider-badge" id="fence-radius-val">350m</strong>
+                  <label for="place-radius-slider">Raio de Detecção</label>
+                  <strong class="slider-badge" id="place-radius-val">250m</strong>
                 </div>
-                <input type="range" id="fence-radius-slider" min="100" max="1500" step="50" value="350" />
-              </div>
-
-              <div class="form-group">
-                <label>Tom do Perímetro</label>
-                <div class="color-picker-row">
-                  <button type="button" class="color-dot active" data-color="#1F6C9F" style="background:#1F6C9F" title="Azul Safira"></button>
-                  <button type="button" class="color-dot" data-color="#2D5E33" style="background:#2D5E33" title="Verde Musgo"></button>
-                  <button type="button" class="color-dot" data-color="#8A5E08" style="background:#8A5E08" title="Âmbar"></button>
-                  <button type="button" class="color-dot" data-color="#962826" style="background:#962826" title="Rubi"></button>
-                </div>
+                <input type="range" id="place-radius-slider" min="100" max="1000" step="50" value="250" />
               </div>
 
               <div class="modal-actions">
-                <button class="btn btn-secondary" id="btn-cancel-fence">Cancelar</button>
-                <button class="btn btn-primary" id="btn-save-fence">
-                  <span class="btn-text">Confirmar</span>
-                  <span class="btn-icon-wrapper">
-                    <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <polyline points="20 6 9 17 4 12"></polyline>
-                    </svg>
-                  </span>
+                <button class="btn-apple-action secondary" id="btn-cancel-place">Cancelar</button>
+                <button class="btn-apple-action primary" id="btn-save-place">Criar Lugar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL COMPARTILHAR CÍRCULO (ESTILO AIRDROP) -->
+      <div class="modal-backdrop" id="modal-share" style="display: none;">
+        <div class="modal-card-shell">
+          <div class="modal-card-core">
+            <div class="modal-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow">CONECTAR AO CÍRCULO</span>
+                <h3>Convidar Familiar ou Amigo</h3>
+              </div>
+              <button class="modal-close" id="btn-close-share-modal" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p class="modal-desc">Escaneie o código QR com a câmera de outro celular para conectar em tempo real via conexão P2P direta.</p>
+
+              <div class="qr-preview-box">
+                <div id="qr-container"></div>
+                <span class="qr-hint">Aponte a câmera do iPhone ou Android</span>
+              </div>
+
+              <div class="circle-code-display">
+                <div class="code-info">
+                  <span class="code-label">CÓDIGO DO CÍRCULO</span>
+                  <strong class="code-val" id="modal-circle-code">FAMILIA-01</strong>
+                </div>
+                <button class="btn-apple-action secondary btn-sm" id="btn-copy-code" title="Copiar Código">
+                  <span>Copiar</span>
                 </button>
+              </div>
+
+              <div class="share-link-row">
+                <input type="text" id="share-link-input" readonly value="" />
+                <button class="btn-apple-action primary" id="btn-copy-link">Copiar Link</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL CENTRAL DE NOTIFICAÇÕES PUSH (APNs / FCM) -->
+      <div class="modal-backdrop" id="modal-notifications" style="display: none;">
+        <div class="modal-card-shell modal-card-notifications">
+          <div class="modal-card-core">
+            <div class="modal-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow">ALERTAS PUSH</span>
+                <h3>Central de Notificações</h3>
+              </div>
+              <button class="modal-close" id="btn-close-notifications-modal" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body modal-body-scrollable">
+              
+              <!-- Card de Status do Dispositivo -->
+              <div class="notif-status-card">
+                <div class="notif-status-header">
+                  <div class="notif-status-left">
+                    <span class="notif-status-indicator" id="notif-status-indicator"></span>
+                    <div>
+                      <strong class="notif-status-title" id="notif-status-title">Permissão Pendente</strong>
+                      <span class="notif-status-sub" id="notif-status-sub">O dispositivo ainda não autorizou notificações push</span>
+                    </div>
+                  </div>
+                  <button class="btn-apple-action primary btn-sm" id="btn-request-notification-perm">
+                    <span class="btn-text">Ativar no Aparelho</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Banner de Instrução Específica para iOS / iPhone -->
+              <div class="notif-ios-banner" id="notif-ios-banner">
+                <div class="ios-banner-header">
+                  <span class="ios-apple-icon"></span>
+                  <strong>Receber Notificações no iPhone (iOS 16.4+)</strong>
+                </div>
+                <p class="ios-banner-desc">A Apple exige que o Web App seja instalado na tela inicial para receber notificações em segundo plano:</p>
+                <ol class="ios-steps-list">
+                  <li>Toque no botão de <strong>Compartilhar (quadrado com seta ⎋)</strong> no Safari.</li>
+                  <li>Role para baixo e selecione <strong>"Adicionar à Tela de Início"</strong>.</li>
+                  <li>Abra pelo ícone na tela inicial e toque em <strong>"Ativar no Aparelho"</strong>.</li>
+                </ol>
+              </div>
+
+              <!-- Seção de Testes de Recebimento -->
+              <div class="notif-test-section">
+                <div class="section-title-sm">
+                  <span>DISPARO DE TESTE (STAGING / APNs)</span>
+                </div>
+                <p class="notif-test-desc">Teste o recebimento da notificação nativa com o formato exato da Central de Notificações do iOS:</p>
+
+                <!-- Prévia da Notificação Estilo iOS -->
+                <div class="ios-notification-preview">
+                  <div class="ios-preview-header">
+                    <div class="ios-preview-app">
+                      <span class="ios-preview-icon">
+                        <img src="/icon.svg" alt="GeoPulse" width="16" height="16" />
+                      </span>
+                      <span class="ios-preview-name">GeoPulse</span>
+                    </div>
+                    <span class="ios-preview-time">agora</span>
+                  </div>
+                  <strong class="ios-preview-title">Teste do backend até os aparelhos...</strong>
+                  <div class="ios-preview-tag">B6</div>
+                  <p class="ios-preview-body">Enviado pelo backend de staging via APNs/FCM. Este é um teste de recebimento.</p>
+                </div>
+
+                <div class="notif-test-actions">
+                  <button class="btn-apple-action secondary" id="btn-test-notification-now" title="Dispara a notificação de teste imediatamente">
+                    <span>Disparar Agora</span>
+                  </button>
+
+                  <button class="btn-apple-action primary" id="btn-test-notification-delay" title="Dispara em 5s para você bloquear a tela do celular">
+                    <span id="btn-delay-text">Testar em 5s (Bloqueie a Tela)</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Seção de Dados Técnicos da Subscrição / Backend -->
+              <div class="notif-integration-section">
+                <div class="section-title-sm">
+                  <span>SUBSCRIPTION / REGISTRO NO BACKEND</span>
+                  <button class="btn-text-action" id="btn-toggle-raw-sub">Ver JSON Técnico</button>
+                </div>
+                
+                <div class="raw-sub-container" id="raw-sub-container" style="display: none;">
+                  <p class="sub-help-text">Este objeto de assinatura (PushSubscription) é o endereço único do seu aparelho no serviço da Apple (APNs) ou Google (FCM):</p>
+                  <pre class="sub-json-box"><code id="sub-json-code">Carregando assinatura...</code></pre>
+                  <button class="btn-apple-action secondary btn-sm" id="btn-copy-subscription">
+                    <span>Copiar Objeto JSON</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Configurações Automáticas do App -->
+              <div class="notif-prefs-section">
+                <div class="section-title-sm">
+                  <span>ALERTAS AUTOMÁTICOS</span>
+                </div>
+                <div class="pref-toggle-row">
+                  <div class="pref-toggle-info">
+                    <strong>Alerta de Emergência SOS</strong>
+                    <span>Receber push no celular quando qualquer membro acionar SOS</span>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="pref-sos-notif" checked />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+
+                <div class="pref-toggle-row">
+                  <div class="pref-toggle-info">
+                    <strong>Lugares Salvos (Chegadas e Saídas)</strong>
+                    <span>Receber aviso ao entrar ou sair de Casa, Trabalho ou Escola</span>
+                  </div>
+                  <label class="switch">
+                    <input type="checkbox" id="pref-fence-notif" checked />
+                    <span class="slider"></span>
+                  </label>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL CONFIRMAÇÃO SOS SEGURO -->
+      <div class="modal-backdrop" id="modal-sos-confirm" style="display: none;">
+        <div class="modal-card-shell modal-card-sos">
+          <div class="modal-card-core">
+            <div class="modal-header sos-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow sos-eyebrow">ALERTA DE EMERGÊNCIA</span>
+                <h3>Disparar Sinal SOS?</h3>
+              </div>
+              <button class="modal-close" id="btn-close-sos-confirm" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p class="modal-desc">Isso enviará uma notificação prioritária imediata com sua localização exata para todos os membros da família.</p>
+              <div class="modal-actions">
+                <button class="btn-apple-action secondary" id="btn-cancel-sos">Cancelar</button>
+                <button class="btn-apple-action danger" id="btn-confirm-sos">Ativar SOS Agora</button>
               </div>
             </div>
           </div>
@@ -406,10 +623,10 @@
         <div class="sos-banner-content">
           <div class="sos-pulse-icon">!</div>
           <div class="sos-info">
-            <strong id="sos-author">ALERTA SOS EM ANDAMENTO</strong>
-            <span id="sos-details">Transmissão prioritária de coordenadas de emergência</span>
+            <strong id="sos-author">ALERTA SOS ATIVO</strong>
+            <span id="sos-details">Transmissão prioritária de emergência em andamento</span>
           </div>
-          <button class="btn btn-sos-dismiss" id="btn-dismiss-sos">Encerrar</button>
+          <button class="btn-sos-dismiss" id="btn-dismiss-sos">Encerrar</button>
         </div>
       </div>
     </div>
