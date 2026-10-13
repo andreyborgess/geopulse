@@ -466,9 +466,10 @@ html, body {
   background: #090D16;
 }
 
-/* Filtro Noturno para Tiles Leaflet */
-.dark-map-tiles {
-  filter: brightness(0.65) invert(1) contrast(3.4) hue-rotate(200deg) saturate(0.3) brightness(0.68) !important;
+/* Contêiner de Mapa e Leaflet */
+.leaflet-container {
+  background-color: #090D16 !important;
+  font-family: var(--font-sans) !important;
 }
 
 /* Banner de Rota Ativa no Topo */
@@ -1727,61 +1728,148 @@ input:checked + .slider:before {
 }
 
 /* =========================================================
-   RESPONSIVIDADE MOBILE (iOS BOTTOM SHEET)
+   RESPONSIVIDADE MOBILE (iOS BOTTOM SHEET & MAP SYNC)
 ========================================================= */
+:root {
+  --sheet-mobile-h: 40vh;
+}
+
+.main-container.sheet-collapsed,
+body.sheet-collapsed {
+  --sheet-mobile-h: calc(64px + env(safe-area-inset-bottom, 0px));
+}
+
 @media (max-width: 768px) {
+  /* Header compacto adaptado a iPhones e telas estreitas */
+  .apple-header-shell {
+    padding-left: max(10px, env(safe-area-inset-left, 0px));
+    padding-right: max(10px, env(safe-area-inset-right, 0px));
+    padding-top: max(8px, env(safe-area-inset-top, 0px));
+  }
+
   .apple-header-core {
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .circle-selector-pill {
+    padding: 5px 9px 5px 6px;
+    gap: 6px;
+  }
+
+  .circle-icon-badge {
+    width: 26px;
+    height: 26px;
   }
 
   .circle-name-text {
-    max-width: 100px;
+    max-width: 82px;
+    font-size: 13px;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .header-center {
-    display: none; /* No mobile, busca fica na gaveta ou recolhida */
+    display: none; /* No mobile, busca fica recolhida para dar espaço total */
   }
 
+  .header-actions {
+    gap: 5px;
+  }
+
+  .btn-apple-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .btn-apple-icon svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .btn-apple-sos {
+    height: 36px;
+    padding: 0 9px;
+    gap: 4px;
+  }
+
+  .sos-label-text {
+    font-size: 11px;
+  }
+
+  .btn-profile-avatar {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* Sheet Flutuante Apple Find My */
   .apple-sheet {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
     width: 100%;
-    height: 44%;
+    height: var(--sheet-mobile-h);
+    max-height: 82vh;
     border-left: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 24px 24px 0 0;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+    transition: height 0.3s cubic-bezier(0.25, 1, 0.3, 1);
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.75);
+    z-index: 700;
   }
 
   .sheet-drag-handle {
     display: block;
-    width: 40px;
+    width: 44px;
     height: 5px;
     border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.35);
     margin: 8px auto 4px auto;
+    cursor: grab;
+    touch-action: none;
   }
 
-  .apple-sheet.collapsed {
-    height: 60px;
-    overflow: hidden;
+  .apple-sheet.collapsed,
+  .main-container.sheet-collapsed .apple-sheet {
+    height: calc(64px + env(safe-area-inset-bottom, 0px)) !important;
   }
 
+  .main-container.sheet-collapsed .apple-sheet .sheet-content-panel,
   .apple-sheet.collapsed .sheet-content-panel {
     display: none !important;
   }
 
+  /* Controles Flutuantes do Mapa - Acompanham dinamicamente a altura da gaveta */
   .apple-map-controls {
-    bottom: calc(44% + 14px);
+    bottom: calc(var(--sheet-mobile-h) + 14px);
     top: auto;
+    right: 14px;
+    transition: bottom 0.3s cubic-bezier(0.25, 1, 0.3, 1);
+    z-index: 600;
   }
 
+  .main-container.sheet-collapsed .apple-map-controls {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 14px) !important;
+  }
+
+  /* Pílula de Telemetria no Rodapé - Nunca encobre controles nem corta */
   .map-status-pill {
-    bottom: calc(44% + 14px);
+    bottom: calc(var(--sheet-mobile-h) + 14px);
+    left: 14px;
+    max-width: calc(100% - 92px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 5px 12px;
+    font-size: 10.5px;
+    transition: bottom 0.3s cubic-bezier(0.25, 1, 0.3, 1);
+    z-index: 600;
+  }
+
+  .main-container.sheet-collapsed .map-status-pill {
+    bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 14px) !important;
   }
 
   .toast-container {

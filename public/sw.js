@@ -1,6 +1,6 @@
-// GeoPulse 2.0 - Service Worker v8 (Offline PWA, Map Tile Caching & Web Push APNs/FCM)
-const CACHE_NAME = 'geopulse-app-v8';
-const TILE_CACHE_NAME = 'geopulse-tiles-v4';
+// GeoPulse 2.0 - Service Worker v9 (Offline PWA, Map Tile Caching & Web Push APNs/FCM)
+const CACHE_NAME = 'geopulse-app-v9';
+const TILE_CACHE_NAME = 'geopulse-tiles-v5';
 
 const STATIC_ASSETS = [
   '/',
@@ -26,7 +26,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) => {
       return Promise.all(
         keys.map((key) => {
-          // Limpa caches antigos (incluindo v1..v5 com tiles CartoDB ou SVGs corrompidos)
+          // Limpa caches antigos (incluindo v1..v8)
           if (key !== CACHE_NAME && key !== TILE_CACHE_NAME) {
             console.log('[SW] Purgando cache antigo:', key);
             return caches.delete(key);
@@ -46,12 +46,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // 1. Tiles de Mapa (OpenStreetMap, Esri ArcGIS - 100% Livres de API Key)
+  // 1. Tiles de Mapa (CartoDB Dark Matter, OpenStreetMap, Esri ArcGIS - 100% Livres de API Key)
   const isMapTile =
     url.hostname.includes('tile.openstreetmap.org') ||
     url.hostname.includes('arcgisonline.com') ||
+    url.hostname.includes('cartocdn.com') ||
     url.pathname.includes('/tile/') ||
-    url.pathname.includes('/tiles/');
+    url.pathname.includes('/tiles/') ||
+    url.pathname.includes('/rastertiles/');
 
   if (isMapTile) {
     event.respondWith(

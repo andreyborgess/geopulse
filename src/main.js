@@ -74,12 +74,16 @@ let userAccuracyCircle = null;
 
 // Provedores de Tiles 100% Livres de API Key e Rate Limits
 const TILE_LAYERS = {
-  // Modo Escuro Sofisticado (Filtro Dark Apple)
-  dark: L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    className: 'dark-map-tiles',
-    attribution: '&copy; OpenStreetMap contributors',
-  }),
+  // Modo Escuro Sofisticado Apple Find My (CartoDB Dark Matter Retina - 0% Artefatos)
+  dark: L.tileLayer(
+    'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png',
+    {
+      subdomains: 'abcd',
+      maxZoom: 20,
+      attribution:
+        '&copy; <a href="https://carto.com/">CARTO</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }
+  ),
   // Modo Satélite Esri de Alta Resolução
   satellite: L.tileLayer(
     'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -117,6 +121,19 @@ function initMap() {
     autoFollowUser = false;
     const recenterBtn = document.getElementById('btn-recenter-floating');
     if (recenterBtn) recenterBtn.classList.remove('active-gps');
+  });
+
+  // Garante renderização integral dos tiles em 100% da tela em qualquer dispositivo
+  setTimeout(() => map?.invalidateSize(), 150);
+  setTimeout(() => map?.invalidateSize(), 600);
+
+  window.addEventListener('resize', () => {
+    if (map) map.invalidateSize();
+  });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 300);
   });
 
   // Renderiza Lugares Salvos e Membros no Mapa
@@ -895,6 +912,57 @@ function setupUIEventListeners() {
   // Fechar rota ativa
   document.getElementById('btn-close-route')?.addEventListener('click', clearActiveRoute);
 
+  // Controle Dinâmico da Gaveta Inferior (Apple Find My Sheet)
+  const mainContainer = document.querySelector('.main-container');
+  const sidebar = document.getElementById('sidebar');
+  const sheetHandle = document.getElementById('sheet-handle');
+  const sheetTabsRow = document.querySelector('.sheet-tabs-row');
+
+  const setSheetCollapsed = (collapsed) => {
+    if (collapsed) {
+      mainContainer?.classList.add('sheet-collapsed');
+      sidebar?.classList.add('collapsed');
+    } else {
+      mainContainer?.classList.remove('sheet-collapsed');
+      sidebar?.classList.remove('collapsed');
+    }
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 320);
+  };
+
+  const toggleSheet = () => {
+    playTactileClick();
+    const isCollapsed =
+      mainContainer?.classList.contains('sheet-collapsed') ||
+      sidebar?.classList.contains('collapsed');
+    setSheetCollapsed(!isCollapsed);
+  };
+
+  sheetHandle?.addEventListener('click', toggleSheet);
+
+  // Gesto Touch Swipe (Deslizar para cima/baixo na aba da gaveta)
+  let sheetTouchStartY = 0;
+  const sheetTouchArea = sheetHandle || sheetTabsRow;
+  sheetTouchArea?.addEventListener('touchstart', (e) => {
+    if (e.touches && e.touches.length > 0) {
+      sheetTouchStartY = e.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  sheetTouchArea?.addEventListener('touchend', (e) => {
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      const diff = e.changedTouches[0].clientY - sheetTouchStartY;
+      if (diff > 35) {
+        setSheetCollapsed(true);
+        playTactileClick();
+      } else if (diff < -35) {
+        setSheetCollapsed(false);
+        playTactileClick();
+      }
+    }
+  }, { passive: true });
+
   // Abas da Gaveta (Pessoas vs Lugares)
   const tabPeople = document.getElementById('tab-btn-people');
   const tabPlaces = document.getElementById('tab-btn-places');
@@ -907,6 +975,7 @@ function setupUIEventListeners() {
     tabPlaces?.classList.remove('active');
     if (panelPeople) panelPeople.style.display = 'flex';
     if (panelPlaces) panelPlaces.style.display = 'none';
+    setSheetCollapsed(false);
   });
 
   tabPlaces?.addEventListener('click', () => {
@@ -915,6 +984,7 @@ function setupUIEventListeners() {
     tabPeople?.classList.remove('active');
     if (panelPlaces) panelPlaces.style.display = 'flex';
     if (panelPeople) panelPeople.style.display = 'none';
+    setSheetCollapsed(false);
   });
 
   // Botão Rápido + no cabeçalho da gaveta
@@ -1173,13 +1243,6 @@ function setupUIEventListeners() {
     }
   });
 
-  // Mobile Bottom Sheet Drag & Toggle
-  const sidebar = document.getElementById('sidebar');
-  const sheetHandle = document.getElementById('sheet-handle');
-  sheetHandle?.addEventListener('click', () => {
-    sidebar?.classList.toggle('collapsed');
-    playTactileClick();
-  });
 }
 
 /* =========================================================
