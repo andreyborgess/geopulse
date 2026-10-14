@@ -242,6 +242,21 @@ function createPlaceMarkerIcon(place) {
 export function updateMarkerForMember(member) {
   if (!map || !member || !member.lat || !member.lng) return;
 
+  const isMe =
+    member.isMe ||
+    member.id === state.currentUser.id ||
+    (state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name) ||
+    ((member.relation === 'Organizador' || member.role === 'Administrador') &&
+      (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+
+  // Se for um registro remoto duplicado do próprio usuário, remove o marcador fantasma
+  if (!member.isMe && isMe) {
+    if (markersMap.has(member.id)) {
+      removeMarker(member.id);
+    }
+    return;
+  }
+
   const currentVisualKey = generateMarkerVisualKey(member);
   const cachedVisualKey = markerCacheMap.get(member.id);
 
@@ -260,6 +275,17 @@ export function updateMarkerForMember(member) {
     }).addTo(map);
 
     marker.on('click', () => {
+      const isClickedMe =
+        member.isMe ||
+        member.id === state.currentUser.id ||
+        (state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name) ||
+        ((member.relation === 'Organizador' || member.role === 'Administrador') &&
+          (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+
+      if (isClickedMe) {
+        eventBus.emit('modal:open-profile');
+        return;
+      }
       eventBus.emit('member:selected', member);
     });
 

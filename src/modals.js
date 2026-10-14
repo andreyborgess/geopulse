@@ -684,4 +684,13 @@ export function initModals() {
   // EventBus listeners
   eventBus.on('toast:show', ({ message, type }) => showToast(message, type));
   eventBus.on('modal:open-share', openConnectDeviceModal);
+  eventBus.on('modal:open-profile', openProfileModal);
+
+  // Fecha modal de perfil ao tocar no backdrop
+  const modalProfile = document.getElementById('modal-profile');
+  modalProfile?.addEventListener('click', (e) => {
+    if (e.target === modalProfile) {
+      closeProfileModal();
+    }
+  });
 }

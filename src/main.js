@@ -42,6 +42,7 @@ import {
   updateNotificationUI,
   showToast,
   openInstallPWAModal,
+  openProfileModal,
 } from './modals.js';
 import {
   setupOnboardingModal,
@@ -176,6 +177,8 @@ function handleIncomingRing(payload) {
 
 function handleMemberJoined(remoteUser, isNewInvite = false) {
   if (!remoteUser || remoteUser.id === state.currentUser.id) return;
+  if (state.currentUser.name && state.currentUser.name !== 'Você' && remoteUser.name === state.currentUser.name) return;
+  if ((remoteUser.relation === 'Organizador' || remoteUser.role === 'Administrador') && (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador')) return;
 
   updateMarkerForMember(remoteUser);
   renderMembersList();
@@ -479,6 +482,10 @@ function bindEventBus() {
 
   eventBus.on('member:selected', (member) => {
     openMemberDetailSheet(member);
+  });
+
+  eventBus.on('modal:open-profile', () => {
+    openProfileModal();
   });
 
   eventBus.on('places:changed', () => {

@@ -1096,13 +1096,16 @@ html, body {
   position: fixed;
   inset: 0;
   z-index: 1500;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding-bottom: max(16px, env(safe-area-inset-bottom));
+  padding-left: 12px;
+  padding-right: 12px;
+  cursor: pointer;
 }
 
 @media (min-width: 769px) {
@@ -1116,10 +1119,22 @@ html, body {
   max-width: 420px;
   background: var(--bg-surface-elevated);
   border: var(--glass-border);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.85);
   border-radius: var(--radius-sheet);
-  padding: 20px;
+  padding: 16px 20px 24px 20px;
   animation: slideUpSpring 0.3s var(--ease-spring);
+  position: relative;
+  cursor: default;
+  touch-action: pan-y;
+}
+
+#detail-sheet-handle {
+  width: 36px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.3);
+  margin: 0 auto 14px auto;
+  cursor: grab;
 }
 
 @keyframes slideUpSpring {
@@ -1179,19 +1194,39 @@ html, body {
 
 .btn-sheet-close {
   position: absolute;
-  top: 0;
-  right: 0;
-  width: 28px;
-  height: 28px;
+  top: -4px;
+  right: -4px;
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
+  min-height: 38px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: var(--text-muted);
-  font-size: 18px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: #FFFFFF;
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 300;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  z-index: 100;
+  pointer-events: auto;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: all 0.15s ease;
+}
+
+.btn-sheet-close:hover {
+  background: rgba(255, 255, 255, 0.3);
+  color: #FFFFFF;
+  transform: scale(1.05);
+}
+
+.btn-sheet-close:active {
+  transform: scale(0.92);
+  background: rgba(255, 255, 255, 0.4);
 }
 
 .member-activity-card {

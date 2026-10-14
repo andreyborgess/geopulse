@@ -174,6 +174,21 @@ export function mergeRemoteMember(remoteUser) {
     return false;
   }
 
+  // Se o membro remoto for o próprio usuário (mesmo nome ou ambos organizadores), não duplica em state.members
+  const isSameName = state.currentUser.name && state.currentUser.name !== 'Você' && remoteUser.name === state.currentUser.name;
+  const isBothOrganizers =
+    (remoteUser.relation === 'Organizador' || remoteUser.role === 'Administrador') &&
+    (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador');
+
+  if (isSameName || isBothOrganizers) {
+    // Se o usuário atual não tiver foto mas o remoto tiver, adota a foto
+    if (remoteUser.photo && !state.currentUser.photo) {
+      state.currentUser.photo = remoteUser.photo;
+      localStorage.setItem('geopulse_user_photo', remoteUser.photo);
+    }
+    return false;
+  }
+
   const existing = state.members.get(remoteUser.id);
   const remoteTime = remoteUser.updatedAt || 0;
   const existingTime = existing?.updatedAt || 0;
@@ -221,7 +236,13 @@ export function mergeRemotePlace(remotePlace) {
 // Inicializa membros e lugares salvos (somente aparelhos reais conectados)
 export function initAppState() {
   // Salva ID persistente de usuário
-  localStorage.setItem('geopulse_user_id', state.currentUser.id);
+  let savedUserId = localStorage.getItem('geopulse_user_id');
+  if (!savedUserId) {
+    savedUserId = state.currentUser.id;
+    localStorage.setItem('geopulse_user_id', savedUserId);
+  } else {
+    state.currentUser.id = savedUserId;
+  }
 
   // Lê círculo da URL se fornecido (convite)
   if (typeof window !== 'undefined' && window.location.search) {
@@ -242,19 +263,83 @@ export function initAppState() {
     }
   }
 
-  // Inicializa Membros (Remove membros demo legados)
+  // Inicializa Membros (Remove membros demo legados e restaura perfil próprio se necessário)
   const savedMembersJson = localStorage.getItem('geopulse_members_data');
   if (savedMembersJson) {
     try {
       const parsed = JSON.parse(savedMembersJson);
-      parsed.forEach((m) => {
-        // Preserva todos os membros reais conectados
-        if (!m.isDemo && m.id !== 'member_mariana' && m.id !== 'member_lucas' && m.id !== 'member_carlos') {
-          state.members.set(m.id, m);
+      if (Array.isArray(parsed)) {
+        // Se o usuário atual estiver sem nome ("Você") ou sem foto, restaura do perfil de organizador salvo (ex: "Dev")
+        const organizerProfile = parsed.find(
+          (m) =>
+            m.isMe ||
+            m.id === state.currentUser.id ||
+            m.name === 'Dev' ||
+            ((m.relation === 'Organizador' || m.role === 'Administrador') && m.name && m.name !== 'Você')
+        );
+
+        if (organizerProfile) {
+          if (!state.currentUser.name || state.currentUser.name === 'Você') {
+            state.currentUser.name = organizerProfile.name;
+            localStorage.setItem('geopulse_user_name', organizerProfile.name);
+          }
+          if (organizerProfile.photo && !state.currentUser.photo) {
+            state.currentUser.photo = organizerProfile.photo;
+            localStorage.setItem('geopulse_user_photo', organizerProfile.photo);
+          }
+          if (organizerProfile.avatar && (!state.currentUser.avatar || state.currentUser.avatar === 'VC')) {
+            state.currentUser.avatar = organizerProfile.avatar;
+            localStorage.setItem('geopulse_user_avatar', organizerProfile.avatar);
+          }
+          if (organizerProfile.color) {
+            state.currentUser.color = organizerProfile.color;
+            localStorage.setItem('geopulse_user_color', organizerProfile.color);
+          }
+          state.currentUser.relation = 'Organizador';
+          state.currentUser.role = 'Administrador';
+          state.currentUser.isMe = true;
+          localStorage.setItem('geopulse_onboarded', 'true');
         }
-      });
+
+        // Filtra e carrega apenas membros reais externos
+        parsed.forEach((m) => {
+          const isCurrentUser =
+            m.isMe ||
+            m.id === state.currentUser.id ||
+            (state.currentUser.name && state.currentUser.name !== 'Você' && m.name === state.currentUser.name) ||
+            ((m.relation === 'Organizador' || m.role === 'Administrador') &&
+              (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+
+          if (isCurrentUser) {
+            return; // NUNCA adiciona o próprio usuário na lista de membros remotos
+          }
+
+          // Preserva apenas membros reais externos
+          if (!m.isDemo && m.id !== 'member_mariana' && m.id !== 'member_lucas' && m.id !== 'member_carlos') {
+            state.members.set(m.id, {
+              ...m,
+              isMe: false,
+            });
+          }
+        });
+      }
     } catch (e) {}
   }
+
+  // Remove qualquer membro que tenha o mesmo ID, nome ou cargo de Organizador do usuário atual
+  state.members.delete(state.currentUser.id);
+  Array.from(state.members.entries()).forEach(([id, m]) => {
+    const isDup =
+      m.isMe ||
+      id === state.currentUser.id ||
+      (state.currentUser.name && state.currentUser.name !== 'Você' && m.name === state.currentUser.name) ||
+      ((m.relation === 'Organizador' || m.role === 'Administrador') &&
+        (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+
+    if (isDup) {
+      state.members.delete(id);
+    }
+  });
 
   // Salva lista limpa de membros reais no storage
   saveMembersToStorage();
@@ -283,7 +368,14 @@ export function initAppState() {
 }
 
 export function saveMembersToStorage() {
-  const membersArray = Array.from(state.members.values());
+  const membersArray = Array.from(state.members.values()).filter(
+    (m) =>
+      !m.isMe &&
+      m.id !== state.currentUser.id &&
+      (!state.currentUser.name || state.currentUser.name === 'Você' || m.name !== state.currentUser.name) &&
+      m.relation !== 'Organizador' &&
+      m.role !== 'Administrador'
+  );
   localStorage.setItem('geopulse_members_data', JSON.stringify(membersArray));
 }
 

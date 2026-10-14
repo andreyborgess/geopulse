@@ -127,8 +127,23 @@ export function renderMembersList() {
   container.querySelectorAll('.member-card').forEach((card) => {
     card.addEventListener('click', () => {
       const id = card.getAttribute('data-id');
-      const member = id === state.currentUser.id ? state.currentUser : state.members.get(id);
-      if (member) openMemberDetailSheet(member);
+      if (id === state.currentUser.id) {
+        eventBus.emit('modal:open-profile');
+        return;
+      }
+      const member = state.members.get(id);
+      if (member) {
+        const isOrganizerMatch =
+          (member.relation === 'Organizador' || member.role === 'Administrador') &&
+          (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador');
+        const isNameMatch = state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name;
+
+        if (member.isMe || isOrganizerMatch || isNameMatch) {
+          eventBus.emit('modal:open-profile');
+          return;
+        }
+        openMemberDetailSheet(member);
+      }
     });
   });
 }
@@ -215,6 +230,22 @@ export function renderPlacesList() {
  * Abre a ficha de detalhes completa do membro
  */
 export function openMemberDetailSheet(member) {
+  if (!member) return;
+
+  // Se for o próprio usuário, abre o modal de edição de perfil
+  const isMe =
+    member.isMe ||
+    member.id === state.currentUser.id ||
+    (state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name) ||
+    ((member.relation === 'Organizador' || member.role === 'Administrador') &&
+      (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+
+  if (isMe) {
+    closeMemberDetailSheet();
+    eventBus.emit('modal:open-profile');
+    return;
+  }
+
   playTactileClick();
   state.selectedMemberId = member.id;
 
@@ -240,30 +271,24 @@ export function openMemberDetailSheet(member) {
   }
 
   if (nameEl) nameEl.textContent = member.name;
-  if (relationEl) relationEl.textContent = member.isMe ? 'Você · Organizador' : member.relation || 'Família 👨‍👩‍👧‍👦';
+  if (relationEl) relationEl.textContent = member.relation || 'Família 👨‍👩‍👧‍👦';
   if (activityText) activityText.textContent = member.activity || '📍 Parado';
   if (addressEl) addressEl.textContent = member.address || 'Localização em tempo real';
   if (speedEl) speedEl.textContent = `${member.speed || 0} km/h`;
 
-  const distMeters = member.isMe
-    ? 0
-    : calculateDistance(state.currentUser.lat, state.currentUser.lng, member.lat, member.lng);
-  if (distanceEl) distanceEl.textContent = member.isMe ? 'Aqui' : formatDistance(distMeters);
+  const distMeters = calculateDistance(state.currentUser.lat, state.currentUser.lng, member.lat, member.lng);
+  if (distanceEl) distanceEl.textContent = formatDistance(distMeters);
 
   if (updatedEl) {
-    if (member.isMe) {
+    const diffMs = Date.now() - (member.updatedAt || 0);
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) {
       updatedEl.textContent = 'Agora';
+    } else if (diffMins < 60) {
+      updatedEl.textContent = `${diffMins} min atrás`;
     } else {
-      const diffMs = Date.now() - (member.updatedAt || 0);
-      const diffMins = Math.floor(diffMs / 60000);
-      if (diffMins < 1) {
-        updatedEl.textContent = 'Agora';
-      } else if (diffMins < 60) {
-        updatedEl.textContent = `${diffMins} min atrás`;
-      } else {
-        const diffHours = Math.floor(diffMins / 60);
-        updatedEl.textContent = `${diffHours}h atrás`;
-      }
+      const diffHours = Math.floor(diffMins / 60);
+      updatedEl.textContent = `${diffHours}h atrás`;
     }
   }
 
@@ -356,7 +381,7 @@ export function openMemberDetailSheet(member) {
   const wrapRemove = document.getElementById('wrap-remove-member');
   const btnRemove = document.getElementById('btn-action-remove-member');
   if (wrapRemove) {
-    wrapRemove.style.display = member.isMe ? 'none' : 'flex';
+    wrapRemove.style.display = 'flex';
   }
   if (btnRemove) {
     btnRemove.onclick = () => {
@@ -379,6 +404,20 @@ export function openMemberDetailSheet(member) {
         eventBus.emit('toast:show', { message: `"${memberName}" foi removido do círculo.`, type: 'info' });
       }
     };
+  }
+
+  // Garante que o botão de fechar (✕) funcione tanto em click quanto em toque
+  const btnCloseDetail = document.getElementById('btn-close-member-detail');
+  if (btnCloseDetail) {
+    const handleClose = (e) => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      closeMemberDetailSheet();
+    };
+    btnCloseDetail.onclick = handleClose;
+    btnCloseDetail.ontouchend = handleClose;
   }
 
   const map = getMapInstance();
@@ -509,5 +548,60 @@ export function setupBottomSheet() {
     if (panelPlaces) panelPlaces.style.display = 'flex';
     if (panelPeople) panelPeople.style.display = 'none';
     setSheetCollapsed(false);
+  });
+
+  // Configuração global de fechamento da Ficha de Detalhes do Membro (X, Backdrop, Swipe down, ESC)
+  const detailSheet = document.getElementById('member-detail-sheet');
+  const btnCloseMemberDetail = document.getElementById('btn-close-member-detail');
+  const detailCard = document.querySelector('.member-detail-card');
+
+  const handleGlobalCloseDetail = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    closeMemberDetailSheet();
+  };
+
+  btnCloseMemberDetail?.addEventListener('click', handleGlobalCloseDetail);
+  btnCloseMemberDetail?.addEventListener('touchend', handleGlobalCloseDetail);
+
+  detailSheet?.addEventListener('click', (e) => {
+    if (e.target === detailSheet) {
+      closeMemberDetailSheet();
+    }
+  });
+
+  let detailTouchStartY = 0;
+  detailCard?.addEventListener(
+    'touchstart',
+    (e) => {
+      if (e.touches && e.touches.length > 0) {
+        detailTouchStartY = e.touches[0].clientY;
+      }
+    },
+    { passive: true }
+  );
+
+  detailCard?.addEventListener(
+    'touchend',
+    (e) => {
+      if (e.changedTouches && e.changedTouches.length > 0) {
+        const diffY = e.changedTouches[0].clientY - detailTouchStartY;
+        if (diffY > 40) {
+          closeMemberDetailSheet();
+        }
+      }
+    },
+    { passive: true }
+  );
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const sheet = document.getElementById('member-detail-sheet');
+      if (sheet && sheet.style.display !== 'none') {
+        closeMemberDetailSheet();
+      }
+    }
   });
 }

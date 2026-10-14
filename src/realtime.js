@@ -204,8 +204,12 @@ export function initRealtimeNetwork({
 
           const remoteUser = payload.user;
 
-          // Ignora mensagens originadas do próprio aparelho
-          if (remoteUser && remoteUser.id === state.currentUser.id) return;
+          // Ignora mensagens originadas do próprio aparelho ou duplicatas do organizador
+          if (remoteUser) {
+            if (remoteUser.id === state.currentUser.id) return;
+            if (state.currentUser.name && state.currentUser.name !== 'Você' && remoteUser.name === state.currentUser.name) return;
+            if ((remoteUser.relation === 'Organizador' || remoteUser.role === 'Administrador') && (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador')) return;
+          }
           if (payload.senderId && payload.senderId === state.currentUser.id) return;
 
           const now = Date.now();
