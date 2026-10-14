@@ -4,6 +4,9 @@ import L from 'leaflet';
 import {
   playTactileClick,
   playRadarPing,
+  playGeofenceAlert,
+  playFindMyChime,
+  stopFindMyChime,
   startSOSAlarm,
   stopSOSAlarm,
 } from './audio.js';
@@ -18,6 +21,7 @@ import {
   state,
   initAppState,
   broadcastUserUpdate,
+  broadcastRingLocal,
   listenToBroadcasts,
   addCustomMember,
   removeMember,
@@ -39,6 +43,7 @@ import {
   initRealtimeNetwork,
   broadcastLocation,
   broadcastSOS,
+  broadcastRingDevice,
   broadcastJoin,
   broadcastPresence,
 } from './realtime.js';
@@ -51,10 +56,31 @@ import {
   requestPushPermission,
   triggerTestPushNotification,
   notifySOSAlert,
+  notifyMemberJoined,
+  notifyFindMyRing,
   notifyGeofenceEvent,
   getNotificationPreferences,
   saveNotificationPreferences,
 } from './notifications.js';
+
+// Monitoramento ativo de saída de área (Avisar ao Sair)
+const memberLeaveAlerts = new Map();
+try {
+  const savedAlerts = localStorage.getItem('geopulse_leave_alerts');
+  if (savedAlerts) {
+    const list = JSON.parse(savedAlerts);
+    if (Array.isArray(list)) {
+      list.forEach((item) => memberLeaveAlerts.set(item.memberId, item));
+    }
+  }
+} catch (e) {}
+
+function saveLeaveAlertsToStorage() {
+  try {
+    const list = Array.from(memberLeaveAlerts.values());
+    localStorage.setItem('geopulse_leave_alerts', JSON.stringify(list));
+  } catch (e) {}
+}
 
 // Coordenadas Centrais de Manaus, Amazonas (Teatro Amazonas / Centro)
 export const MANAUS_COORDS = {
@@ -549,7 +575,7 @@ function renderMembersList() {
   // Evento de clique no card vazio para convidar
   document.getElementById('card-empty-invite')?.addEventListener('click', () => {
     playTactileClick();
-    openShareModal();
+    openConnectDeviceModal();
   });
 
   // Evento de clique para abrir a ficha de detalhes
@@ -571,6 +597,17 @@ function renderPlacesList() {
 
   const tabBadge = document.getElementById('tab-badge-places');
   if (tabBadge) tabBadge.textContent = state.geofences.length;
+
+  if (state.geofences.length === 0) {
+    container.innerHTML = `
+      <div class="empty-places-state">
+        <div class="empty-icon">📍</div>
+        <strong>Nenhum lugar cadastrado</strong>
+        <span>Toque no botão "+ Criar Lugar" abaixo para salvar sua casa, trabalho ou locais favoritos da família.</span>
+      </div>
+    `;
+    return;
+  }
 
   const allMembers = [state.currentUser, ...Array.from(state.members.values())];
 
@@ -643,7 +680,7 @@ function openMemberDetailSheet(member) {
   }
 
   if (nameEl) nameEl.textContent = member.name;
-  if (relationEl) relationEl.textContent = member.isMe ? 'Você · Organizador' : member.relation || 'Família Silva';
+  if (relationEl) relationEl.textContent = member.isMe ? 'Você · Organizador' : member.relation || 'Família 👨‍👩‍👧‍👦';
   if (activityText) activityText.textContent = member.activity || 'Localização Ativa';
   if (addressEl) addressEl.textContent = member.address || 'Adrianópolis, Manaus';
   if (batteryEl) batteryEl.textContent = `${member.battery || 88}%`;
@@ -665,21 +702,70 @@ function openMemberDetailSheet(member) {
     };
   }
 
-  // Configura botão de Tocar Som (Ping)
+  // Configura botão de Tocar Som (Find My Ring)
   const btnPing = document.getElementById('btn-action-ping');
   if (btnPing) {
     btnPing.onclick = () => {
       playRadarPing();
-      showToast(`Sinal sonoro enviado para ${member.name}.`, 'info');
+      broadcastRingDevice(member.id);
+      if (p2pEngine && p2pEngine.broadcastRingDevice) {
+        p2pEngine.broadcastRingDevice(member.id);
+      }
+      broadcastRingLocal(member.id, state.currentUser.name);
+      showToast(`🔊 Enviando sinal para tocar som no celular de ${member.name}...`, 'info');
+
+      // Se for membro de demonstração, simula o toque para teste imediato
+      if (member.isDemo) {
+        setTimeout(() => {
+          handleIncomingRing({ targetId: state.currentUser.id, senderName: member.name });
+        }, 600);
+      }
     };
   }
 
   // Configura botão de Aviso ao Sair
   const btnNotify = document.getElementById('btn-action-notify');
   if (btnNotify) {
+    const isWatching = memberLeaveAlerts.has(member.id);
+    if (isWatching) {
+      btnNotify.classList.add('active');
+      btnNotify.querySelector('span').textContent = '✓ Avisando ao Sair';
+    } else {
+      btnNotify.classList.remove('active');
+      btnNotify.querySelector('span').textContent = 'Avisar ao Sair';
+    }
+
     btnNotify.onclick = () => {
       playTactileClick();
-      showToast(`Você será avisado quando ${member.name} sair da área.`, 'info');
+      if (memberLeaveAlerts.has(member.id)) {
+        memberLeaveAlerts.delete(member.id);
+        saveLeaveAlertsToStorage();
+        btnNotify.classList.remove('active');
+        btnNotify.querySelector('span').textContent = 'Avisar ao Sair';
+        showToast(`Aviso de saída desativado para ${member.name}.`, 'info');
+      } else {
+        const place = state.geofences.find((g) => calculateDistance(g.lat, g.lng, member.lat, member.lng) <= g.radius);
+        const placeName = place ? place.name : (member.address || 'local atual');
+        const radius = place ? place.radius : 200;
+
+        memberLeaveAlerts.set(member.id, {
+          memberId: member.id,
+          memberName: member.name,
+          originLat: member.lat,
+          originLng: member.lng,
+          radius,
+          placeName,
+        });
+        saveLeaveAlertsToStorage();
+
+        btnNotify.classList.add('active');
+        btnNotify.querySelector('span').textContent = '✓ Avisando ao Sair';
+        showToast(`✓ Alerta ativado! Você será avisado assim que ${member.name} sair de ${placeName}.`, 'geofence');
+
+        if ('Notification' in window && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      }
     };
   }
 
@@ -698,6 +784,30 @@ function openMemberDetailSheet(member) {
   }
 
   if (sheet) sheet.style.display = 'flex';
+}
+
+function checkMemberLeaveAlerts(member) {
+  if (!member || !memberLeaveAlerts.has(member.id)) return;
+  const alertData = memberLeaveAlerts.get(member.id);
+  const dist = calculateDistance(alertData.originLat, alertData.originLng, member.lat, member.lng);
+
+  if (dist > alertData.radius) {
+    playGeofenceAlert(false);
+    if ('vibrate' in navigator) navigator.vibrate([300, 150, 300]);
+    notifyGeofenceEvent(member.name, 'saiu de', alertData.placeName);
+    showToast(`🚶 Atenção: ${member.name} acabou de sair de ${alertData.placeName}!`, 'geofence');
+
+    memberLeaveAlerts.delete(member.id);
+    saveLeaveAlertsToStorage();
+
+    if (state.selectedMemberId === member.id) {
+      const btnNotify = document.getElementById('btn-action-notify');
+      if (btnNotify) {
+        btnNotify.classList.remove('active');
+        btnNotify.querySelector('span').textContent = 'Avisar ao Sair';
+      }
+    }
+  }
 }
 
 function closeMemberDetailSheet() {
@@ -755,6 +865,10 @@ function updateHeaderProfileUI() {
       headerAvatar.style.backgroundImage = '';
       headerAvatar.textContent = state.currentUser.avatar || 'VC';
     }
+  }
+  const headerCircleName = document.getElementById('header-circle-name');
+  if (headerCircleName) {
+    headerCircleName.textContent = state.circleName || 'Família 👨‍👩‍👧‍👦';
   }
 }
 
@@ -822,9 +936,49 @@ function closePlaceModal() {
 }
 
 /* =========================================================
-   MODAL COMPARTILHAR CÍRCULO & QR CODE REAL
+   COMPARTILHAR CÍRCULO VS CONECTAR NOVO APARELHO
 ========================================================= */
-async function openShareModal() {
+function getInviteUrl() {
+  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  const baseUrl = isLocal ? 'https://loc-sigma-mauve.vercel.app' : window.location.origin;
+  const peerParam = p2pEngine ? `&peer=${encodeURIComponent(p2pEngine.getMyPeerId())}` : '';
+  return `${baseUrl}/?circle=${encodeURIComponent(state.circleId)}&host=${encodeURIComponent(state.currentUser.name)}${peerParam}&join=1`;
+}
+
+// 1. AÇÃO "COMPARTILHAR" (BARRA SUPERIOR) - Nativo / WhatsApp / SMS / Link
+async function openQuickShare() {
+  playTactileClick();
+  const inviteUrl = getInviteUrl();
+  const shareData = {
+    title: 'Família 👨‍👩‍👧‍👦 - Compartilhar Localização',
+    text: 'Entre no círculo da nossa Família 👨‍👩‍👧‍👦 para acompanharmos localização em tempo real no mapa:',
+    url: inviteUrl,
+  };
+
+  // Se estiver no celular e houver suporte à Web Share API nativa (Safari iPhone, Chrome Android)
+  if (navigator.share && /mobile|android|iphone|ipad/i.test(navigator.userAgent)) {
+    try {
+      await navigator.share(shareData);
+      showToast('Convite compartilhado com sucesso!', 'info');
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+    }
+  }
+
+  // Fallback ou Desktop: Abre modal rápido de opções de compartilhamento
+  const modal = document.getElementById('modal-quick-share');
+  if (modal) modal.style.display = 'flex';
+}
+
+function closeQuickShare() {
+  playTactileClick();
+  const modal = document.getElementById('modal-quick-share');
+  if (modal) modal.style.display = 'none';
+}
+
+// 2. AÇÃO "CONECTAR NOVO APARELHO" - Pareamento por QR Code e Código do Círculo
+async function openConnectDeviceModal() {
   playTactileClick();
   const modal = document.getElementById('modal-share');
   const linkInput = document.getElementById('share-link-input');
@@ -835,14 +989,7 @@ async function openShareModal() {
     modalCircleCode.textContent = state.circleId;
   }
 
-  // Se o usuário estiver no localhost, usa a URL oficial de produção na Vercel
-  // para que o QR Code lido pela câmera de outro celular funcione imediatamente!
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const baseUrl = isLocal ? 'https://loc-sigma-mauve.vercel.app' : window.location.origin;
-
-  const peerParam = p2pEngine ? `&peer=${encodeURIComponent(p2pEngine.getMyPeerId())}` : '';
-  const inviteUrl = `${baseUrl}/?circle=${encodeURIComponent(state.circleId)}&host=${encodeURIComponent(state.currentUser.name)}${peerParam}&join=1`;
-
+  const inviteUrl = getInviteUrl();
   if (linkInput) linkInput.value = inviteUrl;
 
   if (qrContainer) {
@@ -859,11 +1006,14 @@ async function openShareModal() {
   if (modal) modal.style.display = 'flex';
 }
 
-function closeShareModal() {
+function closeConnectDeviceModal() {
   playTactileClick();
   const modal = document.getElementById('modal-share');
   if (modal) modal.style.display = 'none';
 }
+
+const openShareModal = openConnectDeviceModal;
+const closeShareModal = closeConnectDeviceModal;
 
 /* =========================================================
    INSTALAÇÃO PWA DIRETA NO CELULAR (ANDROID / IPHONE)
@@ -1174,7 +1324,7 @@ function closeNotificationsModal() {
 }
 
 /* =========================================================
-   SISTEMA DE EMERGÊNCIA SOS
+   SISTEMA DE EMERGÊNCIA SOS & ALERTAS REMOTOS
 ========================================================= */
 function triggerSOS() {
   state.currentUser.sos = !state.currentUser.sos;
@@ -1183,23 +1333,25 @@ function triggerSOS() {
   if (state.currentUser.sos) {
     startSOSAlarm();
     if (banner) banner.style.display = 'block';
-    showToast('ALERTA SOS ATIVADO! Transmitindo emergência.', 'sos');
+    const authorEl = document.getElementById('sos-author');
+    const detailsEl = document.getElementById('sos-details');
+    if (authorEl) authorEl.textContent = 'ALERTA SOS ATIVO';
+    if (detailsEl) detailsEl.textContent = 'Transmitindo emergência prioritária para todos os membros da família.';
+
+    showToast('🚨 ALERTA SOS ATIVADO! Transmitindo emergência.', 'sos');
     notifySOSAlert(state.currentUser.name);
 
-    broadcastSOS({
+    const sosPayload = {
       author: state.currentUser.name,
       lat: state.currentUser.lat,
       lng: state.currentUser.lng,
       timestamp: Date.now(),
-    });
+    };
 
-    if (p2pEngine) {
-      p2pEngine.broadcastSOS({
-        author: state.currentUser.name,
-        lat: state.currentUser.lat,
-        lng: state.currentUser.lng,
-        timestamp: Date.now(),
-      });
+    broadcastSOS(sosPayload);
+
+    if (p2pEngine && p2pEngine.broadcastSOS) {
+      p2pEngine.broadcastSOS(sosPayload);
     }
   } else {
     stopSOSAlarm();
@@ -1209,6 +1361,83 @@ function triggerSOS() {
 
   updateAllMarkers();
   broadcastUserUpdate(state.currentUser);
+}
+
+function handleIncomingSOS(payload) {
+  const author = payload.user?.name || payload.data?.author || payload.name || 'Membro da Família';
+  const lat = payload.user?.lat || payload.data?.lat || payload.lat;
+  const lng = payload.user?.lng || payload.data?.lng || payload.lng;
+
+  // 1. Toca o alarme sonoro penetrante contínuo
+  startSOSAlarm();
+
+  // 2. Dispara vibração do aparelho celular
+  if ('vibrate' in navigator) {
+    navigator.vibrate([500, 200, 500, 200, 800]);
+  }
+
+  // 3. Notificação nativa no aparelho
+  notifySOSAlert(author);
+
+  // 4. Toast de emergência
+  showToast(`🚨 EMERGÊNCIA: ${author} acionou alerta SOS!`, 'sos');
+
+  // 5. Exibe banner urgente no topo da tela com toque para localizar no mapa
+  const banner = document.getElementById('sos-banner');
+  const authorEl = document.getElementById('sos-author');
+  const detailsEl = document.getElementById('sos-details');
+  if (authorEl) authorEl.textContent = `🚨 ALERTA SOS: ${author}`;
+  if (detailsEl) detailsEl.textContent = 'Acionou emergência! Toque para localizar no mapa.';
+  if (banner) {
+    banner.style.display = 'block';
+    if (lat && lng && map) {
+      banner.onclick = (e) => {
+        if (e.target.id === 'btn-dismiss-sos') return;
+        map.flyTo([lat, lng], 17, { duration: 1.2 });
+      };
+    }
+  }
+}
+
+function handleIncomingRing(payload) {
+  if (payload.targetId !== state.currentUser.id && payload.targetId !== 'ALL') return;
+
+  // 1. Toca chime de alta intensidade do Find My
+  playFindMyChime();
+
+  // 2. Vibração repetida
+  if ('vibrate' in navigator) {
+    navigator.vibrate([400, 200, 400, 200, 600]);
+  }
+
+  // 3. Notificação nativa
+  const sender = payload.senderName || 'Alguém da família';
+  notifyFindMyRing(sender);
+
+  // 4. Modal com botão grande de parar o som
+  const modal = document.getElementById('modal-incoming-ring');
+  const authorEl = document.getElementById('incoming-ring-author');
+  if (authorEl) authorEl.textContent = sender;
+  if (modal) modal.style.display = 'flex';
+}
+
+function handleMemberJoined(remoteUser) {
+  if (!remoteUser || remoteUser.id === state.currentUser.id) return;
+
+  playRadarPing();
+  if ('vibrate' in navigator) {
+    navigator.vibrate([200, 100, 200]);
+  }
+
+  // Notificação nativa no aparelho
+  notifyMemberJoined(remoteUser.name);
+
+  // Toast e atualização
+  showToast(`🎉 ${remoteUser.name} acabou de entrar na Família!`, 'info');
+
+  updateMarkerForMember(remoteUser);
+  renderMembersList();
+  checkActivePlaces();
 }
 
 /* =========================================================
@@ -1376,21 +1605,71 @@ function setupUIEventListeners() {
     if (tabPlaces?.classList.contains('active')) {
       openPlaceModal();
     } else {
-      openShareModal();
+      openConnectDeviceModal();
     }
   });
 
   // Conectar novo aparelho / Guia de Instalação PWA
-  document.getElementById('btn-invite-flow')?.addEventListener('click', openShareModal);
+  document.getElementById('btn-invite-flow')?.addEventListener('click', openConnectDeviceModal);
   document.getElementById('btn-open-install-guide')?.addEventListener('click', () => openInstallPWAModal(false));
   document.getElementById('btn-close-install-modal')?.addEventListener('click', closeInstallPWAModal);
   document.getElementById('btn-continue-in-browser')?.addEventListener('click', closeInstallPWAModal);
   document.getElementById('btn-trigger-pwa-install')?.addEventListener('click', triggerPWAInstall);
 
   // Abertura e fechamento de Modais
-  document.getElementById('btn-share-circle')?.addEventListener('click', openShareModal);
-  document.getElementById('btn-circle-info')?.addEventListener('click', openShareModal);
-  document.getElementById('btn-close-share-modal')?.addEventListener('click', closeShareModal);
+  document.getElementById('btn-share-circle')?.addEventListener('click', openQuickShare);
+  document.getElementById('btn-circle-info')?.addEventListener('click', openQuickShare);
+  document.getElementById('btn-close-share-modal')?.addEventListener('click', closeConnectDeviceModal);
+  document.getElementById('btn-close-quick-share')?.addEventListener('click', closeQuickShare);
+
+  // Ações do Modal Rápido de Compartilhamento (WhatsApp, Copiar, SMS)
+  document.getElementById('btn-share-whatsapp')?.addEventListener('click', () => {
+    playTactileClick();
+    const url = 'https://api.whatsapp.com/send?text=' + encodeURIComponent('Entre no círculo da nossa Família 👨‍👩‍👧‍👦 para acompanharmos localização em tempo real no mapa: ' + getInviteUrl());
+    window.open(url, '_blank');
+  });
+
+  document.getElementById('btn-share-copy-link')?.addEventListener('click', () => {
+    playTactileClick();
+    navigator.clipboard.writeText(getInviteUrl());
+    const textEl = document.getElementById('btn-share-copy-text');
+    if (textEl) textEl.textContent = '✓ Link Copiado!';
+    showToast('Link de convite copiado com sucesso!', 'info');
+    setTimeout(() => {
+      if (textEl) textEl.textContent = 'Copiar Link de Convite';
+    }, 2500);
+  });
+
+  document.getElementById('btn-share-sms')?.addEventListener('click', () => {
+    playTactileClick();
+    const url = 'sms:?body=' + encodeURIComponent('Entre no círculo da nossa Família 👨‍👩‍👧‍👦: ' + getInviteUrl());
+    window.location.href = url;
+  });
+
+  // Conectar a outro círculo via código digitado
+  document.getElementById('btn-submit-join-circle')?.addEventListener('click', () => {
+    playTactileClick();
+    const input = document.getElementById('input-join-circle-code');
+    const newCode = input ? input.value.trim().toUpperCase() : '';
+    if (!newCode) {
+      showToast('Digite o código do círculo para conectar.', 'error');
+      return;
+    }
+    state.circleId = newCode;
+    localStorage.setItem('geopulse_circle_id', newCode);
+    showToast(`Conectado ao círculo ${newCode}!`, 'info');
+    closeConnectDeviceModal();
+    initRealtime();
+    if (p2pEngine) initP2P();
+  });
+
+  // Botão Parar Som no modal de toque
+  document.getElementById('btn-stop-incoming-ring')?.addEventListener('click', () => {
+    playTactileClick();
+    stopFindMyChime();
+    const modal = document.getElementById('modal-incoming-ring');
+    if (modal) modal.style.display = 'none';
+  });
 
   document.getElementById('btn-open-notifications-modal')?.addEventListener('click', openNotificationsModal);
   document.getElementById('btn-close-notifications-modal')?.addEventListener('click', closeNotificationsModal);
@@ -1575,7 +1854,15 @@ function setupUIEventListeners() {
     if (modalSosConfirm) modalSosConfirm.style.display = 'none';
   });
 
-  document.getElementById('btn-dismiss-sos')?.addEventListener('click', triggerSOS);
+  document.getElementById('btn-dismiss-sos')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    stopSOSAlarm();
+    const banner = document.getElementById('sos-banner');
+    if (banner) banner.style.display = 'none';
+    if (state.currentUser.sos) {
+      triggerSOS();
+    }
+  });
 
   // Busca de Endereços
   const searchInput = document.getElementById('map-search-input');
@@ -1691,19 +1978,25 @@ function initCrossTabSync() {
       checkActivePlaces();
     },
     (sosUser) => {
-      showToast(`ALERTA SOS de ${sosUser.name}!`, 'sos');
-      startSOSAlarm();
-      notifySOSAlert(sosUser.name);
+      handleIncomingSOS({ user: sosUser });
+    },
+    (ringData) => {
+      handleIncomingRing(ringData);
+    },
+    (joinedUser) => {
+      handleMemberJoined(joinedUser);
     }
   );
 }
 
 function initP2P() {
   p2pEngine = initP2PNetwork({
-    onPeerConnected: () => {
-      showToast('Novo aparelho conectado ao círculo.', 'info');
-      playRadarPing();
-      renderMembersList();
+    onPeerConnected: (userOrId) => {
+      if (typeof userOrId === 'object' && userOrId && userOrId.name) {
+        handleMemberJoined(userOrId);
+      } else {
+        renderMembersList();
+      }
     },
     onPeerDisconnected: () => {
       renderMembersList();
@@ -1712,6 +2005,13 @@ function initP2P() {
       updateMarkerForMember(remoteUser);
       renderMembersList();
       checkActivePlaces();
+      checkMemberLeaveAlerts(remoteUser);
+    },
+    onSOSReceived: (payload) => {
+      handleIncomingSOS(payload);
+    },
+    onRingReceived: (payload) => {
+      handleIncomingRing(payload);
     },
     onPingUpdated: (peerId, rttMs) => {
       const p2pVal = document.getElementById('p2p-status-val');
@@ -1723,27 +2023,25 @@ function initP2P() {
 function initRealtime() {
   initRealtimeNetwork({
     onMemberJoined: (remoteUser) => {
-      updateMarkerForMember(remoteUser);
-      renderMembersList();
-      playRadarPing();
-      showToast(`🎉 ${remoteUser.name} conectou-se ao círculo!`, 'info');
-      checkActivePlaces();
+      handleMemberJoined(remoteUser);
     },
     onMemberUpdated: (remoteUser) => {
       updateMarkerForMember(remoteUser);
       renderMembersList();
       checkActivePlaces();
+      checkMemberLeaveAlerts(remoteUser);
     },
     onLocationReceived: (remoteUser) => {
       updateMarkerForMember(remoteUser);
       renderMembersList();
       checkActivePlaces();
+      checkMemberLeaveAlerts(remoteUser);
     },
     onSOSReceived: (payload) => {
-      const author = payload.user?.name || 'Membro do Círculo';
-      showToast(`🚨 ALERTA SOS de ${author}!`, 'sos');
-      startSOSAlarm();
-      notifySOSAlert(author);
+      handleIncomingSOS(payload);
+    },
+    onRingReceived: (payload) => {
+      handleIncomingRing(payload);
     },
     onStatusChanged: ({ status }) => {
       const p2pVal = document.getElementById('p2p-status-val');

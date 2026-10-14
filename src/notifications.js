@@ -172,47 +172,108 @@ export async function triggerTestPushNotification({
 }
 
 /**
+ * Disparador unificado e resiliente de notificações do dispositivo
+ * Suporta ServiceWorker Registration com fallback instantâneo para Web Notification API
+ */
+export async function dispatchDeviceNotification(title, options = {}) {
+  const mergedOptions = {
+    icon: '/icon.svg',
+    badge: '/icon.svg',
+    data: { url: '/' },
+    ...options,
+  };
+
+  // Se o navegador tem suporte a notificações nativas
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      if ('serviceWorker' in navigator) {
+        // Tenta obter o registration pronto com timeout curto de 800ms para nunca travar
+        const reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((_, reject) => setTimeout(() => reject('timeout'), 800)),
+        ]);
+        if (reg && reg.showNotification) {
+          await reg.showNotification(title, mergedOptions);
+          return true;
+        }
+      }
+    } catch (e) {
+      // Ignora timeout e segue para fallback
+    }
+
+    try {
+      new Notification(title, mergedOptions);
+      return true;
+    } catch (e) {
+      console.debug('[Push] Erro ao instanciar Notification fallback:', e);
+    }
+  }
+  return false;
+}
+
+/**
  * Dispara notificação push de Alerta SOS
  */
 export async function notifySOSAlert(authorName = 'Membro') {
   const prefs = getNotificationPreferences();
-  if (!prefs.sos || getPermissionStatus() !== 'granted') return;
+  if (prefs.sos === false) return;
 
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    await registration.showNotification('🚨 ALERTA SOS EM ANDAMENTO', {
-      body: `${authorName} acionou alerta de emergência no círculo tático!`,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
-      tag: 'geopulse-sos-' + Date.now(),
-      vibrate: [300, 100, 300, 100, 300],
-      data: { url: '/' },
-    });
-  } catch (err) {
-    console.warn('[Push] Erro ao enviar notificação de SOS:', err);
-  }
+  const title = '🚨 ALERTA SOS NA FAMÍLIA 👨‍👩‍👧‍👦';
+  const body = `${authorName} acionou alerta de emergência no celular!`;
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-sos-' + Date.now(),
+    vibrate: [400, 200, 400, 200, 600],
+    requireInteraction: true,
+  });
 }
 
 /**
- * Dispara notificação push de Cerca Virtual violada
+ * Dispara notificação de Novo Membro que entrou na Família
+ */
+export async function notifyMemberJoined(memberName = 'Novo Membro') {
+  const title = '👋 Novo Membro na Família 👨‍👩‍👧‍👦';
+  const body = `${memberName} acabou de entrar no círculo familiar!`;
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-join-' + Date.now(),
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+  });
+}
+
+/**
+ * Dispara notificação de Localizar Aparelho (Tocar Som Remoto)
+ */
+export async function notifyFindMyRing(senderName = 'Alguém da família') {
+  const title = '🔔 LOCALIZAR APARELHO';
+  const body = `${senderName} está tocando o som deste aparelho para localizá-lo!`;
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-ring-' + Date.now(),
+    vibrate: [400, 200, 400, 200, 600],
+    requireInteraction: true,
+  });
+}
+
+/**
+ * Dispara notificação push de Cerca Virtual ou Saída de Área
  */
 export async function notifyGeofenceEvent(memberName, action, fenceName) {
   const prefs = getNotificationPreferences();
-  if (!prefs.fence || getPermissionStatus() !== 'granted') return;
+  if (prefs.fence === false) return;
 
-  try {
-    const registration = await navigator.serviceWorker.ready;
-    await registration.showNotification('📍 Cerca Virtual Monitorada', {
-      body: `${memberName} ${action} ${fenceName}.`,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
-      tag: 'geopulse-fence-' + Date.now(),
-      vibrate: [150, 80, 150],
-      data: { url: '/' },
-    });
-  } catch (err) {
-    console.warn('[Push] Erro ao enviar notificação de geofence:', err);
-  }
+  const title = '📍 Aviso de Movimentação';
+  const body = `${memberName} ${action} ${fenceName}.`;
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-fence-' + Date.now(),
+    vibrate: [200, 100, 200],
+  });
 }
 
 /**
@@ -229,3 +290,4 @@ export function getNotificationPreferences() {
 export function saveNotificationPreferences(prefs) {
   localStorage.setItem('geopulse_notif_prefs', JSON.stringify(prefs));
 }
+

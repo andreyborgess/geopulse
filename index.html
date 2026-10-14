@@ -41,7 +41,7 @@
                 </svg>
               </span>
               <div class="circle-text-meta">
-                <span class="circle-name-text" id="header-circle-name">Família Silva</span>
+                <span class="circle-name-text" id="header-circle-name">Família 👨‍👩‍👧‍👦</span>
                 <span class="circle-member-badge" id="header-member-count">4</span>
               </div>
               <svg class="chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="12" height="12">
@@ -67,8 +67,8 @@
 
           <!-- Ações Rápidas à Direita -->
           <div class="header-actions">
-            <!-- Botão Conectar P2P / Convidar -->
-            <button class="btn-apple-icon" id="btn-share-circle" title="Convidar aparelhos para o círculo">
+            <!-- Botão Compartilhar Círculo (WhatsApp, Link) -->
+            <button class="btn-apple-icon" id="btn-share-circle" title="Compartilhar Círculo (WhatsApp, Link)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"></path>
                 <polyline points="16 6 12 2 8 6"></polyline>
@@ -272,8 +272,8 @@
               <span class="member-sheet-status-dot online" id="detail-dot"></span>
             </div>
             <div class="member-sheet-title-info">
-              <h2 id="detail-name">Mariana Silva</h2>
-              <span class="detail-relation" id="detail-relation">Esposa · Família Silva</span>
+              <h2 id="detail-name">Mariana</h2>
+              <span class="detail-relation" id="detail-relation">Esposa · Família 👨‍👩‍👧‍👦</span>
             </div>
             <button class="btn-sheet-close" id="btn-close-member-detail" title="Fechar">&times;</button>
           </div>
@@ -373,7 +373,7 @@
 
               <div class="form-group">
                 <label for="input-profile-name">Seu Nome de Exibição</label>
-                <input type="text" id="input-profile-name" value="Você" placeholder="Ex: André Silva" />
+                <input type="text" id="input-profile-name" value="Você" placeholder="Ex: André" />
               </div>
 
               <div class="form-group">
@@ -459,19 +459,19 @@
         </div>
       </div>
 
-      <!-- MODAL COMPARTILHAR CÍRCULO (ESTILO AIRDROP) -->
+      <!-- MODAL CONECTAR NOVO APARELHO (PAREAMENTO DE CELULARES & QR CODE) -->
       <div class="modal-backdrop" id="modal-share" style="display: none;">
         <div class="modal-card-shell">
           <div class="modal-card-core">
             <div class="modal-header">
               <div class="modal-header-info">
-                <span class="modal-eyebrow">CONECTAR AO CÍRCULO</span>
-                <h3>Convidar Familiar ou Amigo</h3>
+                <span class="modal-eyebrow">PAREAMENTO EM TEMPO REAL</span>
+                <h3>Conectar Novo Aparelho</h3>
               </div>
               <button class="modal-close" id="btn-close-share-modal" title="Fechar">&times;</button>
             </div>
             <div class="modal-body">
-              <p class="modal-desc">Escaneie o código QR com a câmera de outro celular para conectar em tempo real via conexão P2P direta.</p>
+              <p class="modal-desc">Aponte a câmera do celular que deseja adicionar para ler o código QR e conectar instantaneamente em tempo real:</p>
 
               <div class="qr-preview-box">
                 <div id="qr-container"></div>
@@ -480,11 +480,11 @@
 
               <div class="circle-code-display">
                 <div class="code-info">
-                  <span class="code-label">CÓDIGO DO CÍRCULO</span>
+                  <span class="code-label">CÓDIGO DESTE CÍRCULO</span>
                   <strong class="code-val" id="modal-circle-code">FAMILIA-01</strong>
                 </div>
                 <button class="btn-apple-action secondary btn-sm" id="btn-copy-code" title="Copiar Código">
-                  <span>Copiar</span>
+                  <span>Copiar Código</span>
                 </button>
               </div>
 
@@ -492,7 +492,68 @@
                 <input type="text" id="share-link-input" readonly value="" />
                 <button class="btn-apple-action primary" id="btn-copy-link">Copiar Link</button>
               </div>
+
+              <!-- Conectar a outro círculo existente via código -->
+              <div class="join-code-box" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle);">
+                <span class="field-label" style="display: block; margin-bottom: 6px;">Ou entrar no círculo de outro celular:</span>
+                <div class="share-link-row" style="margin-bottom: 0;">
+                  <input type="text" id="input-join-circle-code" placeholder="Ex: FAMILIA-02" style="text-transform: uppercase;" />
+                  <button class="btn-apple-action secondary" id="btn-submit-join-circle">Conectar</button>
+                </div>
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL COMPARTILHAR CÍRCULO (WHATSAPP, LINK DIRETO, SMS) -->
+      <div class="modal-backdrop" id="modal-quick-share" style="display: none;">
+        <div class="modal-card-shell" style="max-width: 400px;">
+          <div class="modal-card-core">
+            <div class="modal-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow">COMPARTILHAR</span>
+                <h3>Convidar para a Família 👨‍👩‍👧‍👦</h3>
+              </div>
+              <button class="modal-close" id="btn-close-quick-share" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p class="modal-desc">Envie o link para membros da família acompanharem a localização em tempo real no mapa:</p>
+              
+              <div class="quick-share-buttons" style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px;">
+                <button class="btn-apple-action" id="btn-share-whatsapp" style="background: #25D366; color: #FFFFFF; width: 100%; justify-content: flex-start; padding: 12px 16px; font-size: 14px;">
+                  <span style="font-size: 20px;">💬</span>
+                  <span style="font-weight: 600;">Compartilhar no WhatsApp</span>
+                </button>
+
+                <button class="btn-apple-action primary" id="btn-share-copy-link" style="width: 100%; justify-content: flex-start; padding: 12px 16px; font-size: 14px;">
+                  <span style="font-size: 20px;">🔗</span>
+                  <span style="font-weight: 600;" id="btn-share-copy-text">Copiar Link de Convite</span>
+                </button>
+
+                <button class="btn-apple-action secondary" id="btn-share-sms" style="width: 100%; justify-content: flex-start; padding: 12px 16px; font-size: 14px;">
+                  <span style="font-size: 20px;">✉️</span>
+                  <span style="font-weight: 600;">Enviar por Mensagem / SMS</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL LOCALIZAÇÃO SONORA (TOCAR SOM NO APARELHO - FIND MY) -->
+      <div class="modal-backdrop" id="modal-incoming-ring" style="display: none; z-index: 10000;">
+        <div class="modal-card-shell" style="max-width: 360px;">
+          <div class="modal-card-core" style="text-align: center; padding: 28px 20px;">
+            <div class="ring-bell-pulse" style="font-size: 52px; margin-bottom: 8px;">🔔</div>
+            <span class="modal-eyebrow" style="color: var(--apple-blue); font-weight: 700;">LOCALIZAR APARELHO</span>
+            <h3 style="margin: 8px 0; font-size: 20px;">Sinal Sonoro Ativado!</h3>
+            <p id="incoming-ring-desc" class="modal-desc" style="margin-bottom: 22px;">
+              <strong id="incoming-ring-author">Alguém da família</strong> está tocando o som deste aparelho para encontrá-lo.
+            </p>
+            <button class="btn-apple-action primary" id="btn-stop-incoming-ring" style="width: 100%; padding: 14px; font-weight: 700; font-size: 16px;">
+              <span>⏹️ Parar Som</span>
+            </button>
           </div>
         </div>
       </div>

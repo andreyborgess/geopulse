@@ -1152,6 +1152,58 @@ html, body {
   font-size: 11.5px;
 }
 
+.btn-apple-action.active {
+  background: #34C759 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 16px rgba(52, 199, 89, 0.45);
+}
+
+.btn-apple-action.active:hover {
+  background: #2EB14E !important;
+}
+
+.empty-places-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 36px 18px;
+  background: var(--surface-translucent);
+  border: 1px dashed var(--border-subtle);
+  border-radius: var(--radius-card);
+  margin-bottom: 12px;
+}
+
+.empty-places-state .empty-icon {
+  font-size: 38px;
+  margin-bottom: 10px;
+}
+
+.empty-places-state strong {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 6px;
+}
+
+.empty-places-state span {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 260px;
+}
+
+.ring-bell-pulse {
+  display: inline-block;
+  animation: ringBellAnim 0.7s infinite alternate ease-in-out;
+}
+
+@keyframes ringBellAnim {
+  0% { transform: scale(1) rotate(-8deg); }
+  100% { transform: scale(1.18) rotate(8deg); }
+}
+
 /* =========================================================
    MODAIS & FORMULÁRIOS
 ========================================================= */

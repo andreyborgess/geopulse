@@ -19,48 +19,14 @@ try {
   // ignore
 }
 
-// Estado inicial de Lugares Salvos (Padrão Família)
-export const DEFAULT_SAVED_PLACES = [
-  {
-    id: 'place_casa',
-    name: 'Casa da Família',
-    category: 'home',
-    icon: '🏠',
-    lat: -3.1025,
-    lng: -60.0142,
-    radius: 250,
-    color: '#007AFF',
-    address: 'Adrianópolis, Manaus',
-  },
-  {
-    id: 'place_trabalho',
-    name: 'Trabalho / Centro',
-    category: 'work',
-    icon: '💼',
-    lat: -3.1310,
-    lng: -60.0240,
-    radius: 200,
-    color: '#5856D6',
-    address: 'Centro, Manaus',
-  },
-  {
-    id: 'place_escola',
-    name: 'Faculdade / Campus',
-    category: 'school',
-    icon: '🎓',
-    lat: -3.0990,
-    lng: -59.9880,
-    radius: 350,
-    color: '#34C759',
-    address: 'Coroado, Manaus',
-  },
-];
+// Estado inicial de Lugares Salvos (Sem lugares fictícios - apenas criados pelo usuário)
+export const DEFAULT_SAVED_PLACES = [];
 
 // Estado inicial de Membros de Demonstração (Realistas e Orgânicos)
 export const DEFAULT_DEMO_MEMBERS = [
   {
     id: 'member_mariana',
-    name: 'Mariana Silva',
+    name: 'Mariana',
     relation: 'Esposa',
     lat: -3.1025,
     lng: -60.0142,
@@ -70,7 +36,7 @@ export const DEFAULT_DEMO_MEMBERS = [
     battery: 88,
     charging: false,
     color: '#EC4899',
-    avatar: 'MS',
+    avatar: 'M',
     photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
     activity: '🏠 Em Casa',
     address: 'Adrianópolis, Manaus',
@@ -84,7 +50,7 @@ export const DEFAULT_DEMO_MEMBERS = [
   },
   {
     id: 'member_lucas',
-    name: 'Lucas Silva',
+    name: 'Lucas',
     relation: 'Filho',
     lat: -3.0950,
     lng: -60.0280,
@@ -94,7 +60,7 @@ export const DEFAULT_DEMO_MEMBERS = [
     battery: 62,
     charging: false,
     color: '#007AFF',
-    avatar: 'LS',
+    avatar: 'L',
     photo: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
     activity: '🚗 Dirigindo · 44 km/h',
     address: 'Av. Djalma Batista, Manaus',
@@ -109,7 +75,7 @@ export const DEFAULT_DEMO_MEMBERS = [
   },
   {
     id: 'member_carlos',
-    name: 'Carlos Mendes',
+    name: 'Carlos',
     relation: 'Irmão',
     lat: -3.0990,
     lng: -59.9880,
@@ -119,7 +85,7 @@ export const DEFAULT_DEMO_MEMBERS = [
     battery: 95,
     charging: true,
     color: '#34C759',
-    avatar: 'CM',
+    avatar: 'C',
     photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
     activity: '🎓 Na Faculdade',
     address: 'Setor Sul / UFAM, Manaus',
@@ -133,10 +99,17 @@ export const DEFAULT_DEMO_MEMBERS = [
   },
 ];
 
+// Garante migração de "Família Silva" para apenas "Família 👨‍👩‍👧‍👦"
+let initialCircleName = localStorage.getItem('geopulse_circle_name');
+if (!initialCircleName || initialCircleName === 'Família Silva' || initialCircleName === 'Família') {
+  initialCircleName = 'Família 👨‍👩‍👧‍👦';
+  localStorage.setItem('geopulse_circle_name', initialCircleName);
+}
+
 // Estado dos membros do círculo
 export const state = {
   circleId: localStorage.getItem('geopulse_circle_id') || 'FAMILIA-01',
-  circleName: localStorage.getItem('geopulse_circle_name') || 'Família Silva',
+  circleName: initialCircleName,
   currentUser: {
     id: localStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).substr(2, 6)}`,
     name: localStorage.getItem('geopulse_user_name') || 'Você',
@@ -235,18 +208,27 @@ export function initAppState() {
   // Salva lista limpa de membros reais no storage
   saveMembersToStorage();
 
-  // Inicializa Lugares Salvos
+  // Inicializa Lugares Salvos (Apenas criados pelo usuário - remove lugares fictícios)
   const savedPlacesJson = localStorage.getItem('geopulse_saved_places');
   if (savedPlacesJson) {
     try {
-      state.geofences = JSON.parse(savedPlacesJson);
+      const parsed = JSON.parse(savedPlacesJson);
+      state.geofences = Array.isArray(parsed)
+        ? parsed.filter(
+            (p) =>
+              p.id !== 'place_casa' &&
+              p.id !== 'place_trabalho' &&
+              p.id !== 'place_escola' &&
+              !p.isDemo
+          )
+        : [];
     } catch (e) {
-      state.geofences = [...DEFAULT_SAVED_PLACES];
+      state.geofences = [];
     }
   } else {
-    state.geofences = [...DEFAULT_SAVED_PLACES];
-    localStorage.setItem('geopulse_saved_places', JSON.stringify(state.geofences));
+    state.geofences = [];
   }
+  savePlacesToStorage();
 }
 
 export function saveMembersToStorage() {
@@ -284,26 +266,55 @@ export function broadcastUserUpdate(userData) {
 }
 
 /**
+ * Dispara sinal sonoro (Ring Device) localmente entre abas
+ */
+export function broadcastRingLocal(targetId, senderName) {
+  const payload = {
+    type: 'RING_DEVICE',
+    circleId: state.circleId,
+    targetId,
+    senderName: senderName || state.currentUser.name,
+    ts: Date.now(),
+  };
+
+  if (channel) {
+    channel.postMessage(payload);
+  }
+
+  try {
+    localStorage.setItem('geopulse_last_broadcast', JSON.stringify({ ...payload, ts: Date.now() }));
+  } catch (e) {}
+}
+
+/**
  * Escuta atualizações de outras abas ou dispositivos que entrarem no círculo
  */
-export function listenToBroadcasts(onMemberUpdate, onSosAlert) {
+export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMemberJoin) {
   const handlePayload = (payload) => {
     if (!payload || payload.circleId !== state.circleId) return;
 
     if (payload.type === 'USER_UPDATE' && payload.user) {
       if (payload.user.id !== state.currentUser.id) {
+        const isNew = !state.members.has(payload.user.id);
         state.members.set(payload.user.id, {
           ...payload.user,
           isMe: false,
           isVirtual: false,
         });
         if (onMemberUpdate) onMemberUpdate(payload.user.id);
+        if (isNew && onMemberJoin) onMemberJoin(payload.user);
         if (payload.user.sos && onSosAlert) {
           onSosAlert(payload.user);
         }
       }
-    } else if (payload.type === 'SOS_SIGNAL' && payload.user) {
+    } else if ((payload.type === 'SOS_SIGNAL' || payload.type === 'SOS') && payload.user) {
       if (onSosAlert) onSosAlert(payload.user);
+    } else if (payload.type === 'RING_DEVICE' && payload.targetId) {
+      if (onRingAlert) onRingAlert(payload);
+    } else if (payload.type === 'JOIN' && payload.user) {
+      if (payload.user.id !== state.currentUser.id && onMemberJoin) {
+        onMemberJoin(payload.user);
+      }
     }
   };
 
@@ -324,6 +335,7 @@ export function listenToBroadcasts(onMemberUpdate, onSosAlert) {
     }
   });
 }
+
 
 /**
  * Permite adicionar um novo membro ou ponto de rastreamento manualmente caso o usuário deseje

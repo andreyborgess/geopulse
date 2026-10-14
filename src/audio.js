@@ -112,3 +112,51 @@ export function stopSOSAlarm() {
     sosInterval = null;
   }
 }
+
+// Chime de alta intensidade para "Tocar Som" (Localizar Aparelho / Find My style)
+let ringInterval = null;
+
+export function playFindMyChime() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    stopFindMyChime();
+
+    const chimeCycle = () => {
+      const now = ctx.currentTime;
+      // Três notas ascendentes penetrantes e claras (C6, E6, C7)
+      const tones = [
+        { freq: 1046.5, time: now + 0.0, dur: 0.14 },
+        { freq: 1318.5, time: now + 0.16, dur: 0.14 },
+        { freq: 2093.0, time: now + 0.34, dur: 0.35 },
+        { freq: 2093.0, time: now + 0.72, dur: 0.25 },
+      ];
+
+      tones.forEach(({ freq, time, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, time);
+        gain.gain.setValueAtTime(0.3, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(time);
+        osc.stop(time + dur + 0.05);
+      });
+    };
+
+    chimeCycle();
+    ringInterval = setInterval(chimeCycle, 1300);
+  } catch (e) {
+    console.debug('Find My Chime audio error', e);
+  }
+}
+
+export function stopFindMyChime() {
+  if (ringInterval) {
+    clearInterval(ringInterval);
+    ringInterval = null;
+  }
+}
+

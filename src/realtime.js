@@ -64,6 +64,7 @@ export function initRealtimeNetwork({
   onMemberUpdated,
   onLocationReceived,
   onSOSReceived,
+  onRingReceived,
   onStatusChanged,
 }) {
   const circleIdSafe = (state.circleId || 'FAMILIA-01').replace(/[^a-zA-Z0-9_-]/g, '');
@@ -111,16 +112,17 @@ export function initRealtimeNetwork({
       client.on('message', (topic, rawMessage) => {
         try {
           const payload = JSON.parse(rawMessage.toString());
-          if (!payload || !payload.type || !payload.user) return;
+          if (!payload || !payload.type) return;
 
           const remoteUser = payload.user;
 
           // Ignora mensagens originadas do próprio aparelho
-          if (remoteUser.id === state.currentUser.id) return;
+          if (remoteUser && remoteUser.id === state.currentUser.id) return;
+          if (payload.senderId && payload.senderId === state.currentUser.id) return;
 
           const now = Date.now();
 
-          if (payload.type === 'JOIN') {
+          if (payload.type === 'JOIN' && remoteUser) {
             console.log('[Realtime] Novo aparelho entrou no círculo:', remoteUser.name);
             state.members.set(remoteUser.id, {
               ...remoteUser,
@@ -137,7 +139,7 @@ export function initRealtimeNetwork({
               broadcastPresence();
             }, 200);
 
-          } else if (payload.type === 'PRESENCE') {
+          } else if (payload.type === 'PRESENCE' && remoteUser) {
             const existing = state.members.get(remoteUser.id) || {};
             state.members.set(remoteUser.id, {
               ...existing,
@@ -150,7 +152,7 @@ export function initRealtimeNetwork({
 
             if (onMemberUpdated) onMemberUpdated(remoteUser);
 
-          } else if (payload.type === 'LOCATION') {
+          } else if (payload.type === 'LOCATION' && remoteUser) {
             const existing = state.members.get(remoteUser.id) || {};
             const updated = {
               ...existing,
@@ -165,8 +167,12 @@ export function initRealtimeNetwork({
             if (onLocationReceived) onLocationReceived(updated);
 
           } else if (payload.type === 'SOS') {
-            console.warn('[Realtime] Alerta SOS recebido:', remoteUser.name);
+            console.warn('[Realtime] Alerta SOS recebido:', remoteUser?.name || payload.data?.author);
             if (onSOSReceived) onSOSReceived(payload);
+
+          } else if (payload.type === 'RING_DEVICE') {
+            console.log('[Realtime] Alerta sonoro de localização recebido:', payload);
+            if (onRingReceived) onRingReceived(payload);
           }
         } catch (err) {
           console.warn('[Realtime] Falha ao processar mensagem MQTT:', err);
@@ -202,6 +208,7 @@ export function initRealtimeNetwork({
   return {
     broadcastLocation: (user) => broadcastLocation(user),
     broadcastSOS: (sosData) => broadcastSOS(sosData),
+    broadcastRingDevice: (targetId) => broadcastRingDevice(targetId),
     broadcastJoin: () => broadcastJoin(),
     broadcastPresence: () => broadcastPresence(),
     isConnected: () => isConnected,
@@ -275,8 +282,29 @@ export function broadcastSOS(sosData) {
     ts: Date.now(),
   };
   try {
-    mqttClient.publish(`${currentCircleTopic}/events`, JSON.stringify(payload));
+    mqttClient.publish(`${currentCircleTopic}/events`, JSON.stringify(payload), { qos: 1 });
   } catch (e) {
     console.warn('[Realtime Send Error]', e);
   }
 }
+
+/**
+ * Transmite sinal para tocar som de alta intensidade no aparelho de um membro (Find My)
+ */
+export function broadcastRingDevice(targetId) {
+  if (!mqttClient || !isConnected) return;
+  const payload = {
+    type: 'RING_DEVICE',
+    targetId,
+    senderName: state.currentUser.name,
+    senderId: state.currentUser.id,
+    user: getCleanCurrentUser(),
+    ts: Date.now(),
+  };
+  try {
+    mqttClient.publish(`${currentCircleTopic}/events`, JSON.stringify(payload), { qos: 1 });
+  } catch (e) {
+    console.warn('[Realtime Send Ring Error]', e);
+  }
+}
+

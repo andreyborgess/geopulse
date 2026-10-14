@@ -29,8 +29,8 @@ export async function enableScreenWakeLock() {
 /**
  * Inicializa a rede P2P WebRTC para o círculo
  */
-export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocationReceived, onPingUpdated }) {
-  const handlers = { onPeerConnected, onPeerDisconnected, onLocationReceived, onPingUpdated };
+export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated }) {
+  const handlers = { onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated };
   const circleKey = state.circleId.replace(/[^a-zA-Z0-9]/g, '') || 'FAMILIA01';
   const myShortId = state.currentUser.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6);
 
@@ -100,7 +100,8 @@ export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocation
   return {
     getMyPeerId: () => activeLivePeerId || peerInstance?.id || myPeerId,
     broadcastPosition: (userData) => sendP2PBroadcast({ type: 'LOCATION', data: userData }),
-    broadcastSOS: (sosData) => sendP2PBroadcast({ type: 'SOS', data: sosData }),
+    broadcastSOS: (sosData) => sendP2PBroadcast({ type: 'SOS', user: state.currentUser, data: sosData }),
+    broadcastRingDevice: (targetId) => sendP2PBroadcast({ type: 'RING_DEVICE', targetId, senderName: state.currentUser.name, senderId: state.currentUser.id }),
     connectTo: (peerId) => connectToRemotePeer(peerId, handlers),
     getConnectionCount: () => activeConnections.size,
   };
@@ -136,7 +137,8 @@ export function connectToRemotePeer(targetPeerId, handlers, retryCount = 0) {
 /**
  * Configura eventos do canal de dados WebRTC bidirecional
  */
-function setupConnectionEvents(conn, { onPeerConnected, onPeerDisconnected, onLocationReceived, onPingUpdated }) {
+function setupConnectionEvents(conn, handlers = {}) {
+  const { onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated } = handlers;
   conn.on('open', () => {
     activeConnections.set(conn.peer, conn);
     console.log('[P2P] Canal conectado com:', conn.peer);
@@ -170,6 +172,7 @@ function setupConnectionEvents(conn, { onPeerConnected, onPeerDisconnected, onLo
     if (!payload) return;
 
     if (payload.type === 'HANDSHAKE' && payload.user) {
+      const isNew = !state.members.has(payload.user.id);
       // Registra o outro aparelho como membro real ativo no círculo
       state.members.set(payload.user.id, {
         ...payload.user,
@@ -183,6 +186,7 @@ function setupConnectionEvents(conn, { onPeerConnected, onPeerDisconnected, onLo
       // Retribui a posição atualizada imediatamente
       conn.send({ type: 'LOCATION', data: state.currentUser });
       if (onLocationReceived) onLocationReceived(payload.user);
+      if (isNew && onPeerConnected) onPeerConnected(payload.user);
     } else if (payload.type === 'LOCATION' && payload.data) {
       // Atualização contínua de posição de quem está se movimentando
       state.members.set(payload.data.id, {
@@ -194,6 +198,12 @@ function setupConnectionEvents(conn, { onPeerConnected, onPeerDisconnected, onLo
       });
       saveMembersToStorage();
       if (onLocationReceived) onLocationReceived(payload.data);
+    } else if (payload.type === 'SOS') {
+      console.warn('[P2P] Alerta SOS recebido:', payload);
+      if (onSOSReceived) onSOSReceived(payload);
+    } else if (payload.type === 'RING_DEVICE') {
+      console.log('[P2P] Alerta sonoro de localização recebido:', payload);
+      if (onRingReceived) onRingReceived(payload);
     } else if (payload.type === 'PING') {
       conn.send({ type: 'PONG', start: payload.start });
     } else if (payload.type === 'PONG') {
@@ -208,7 +218,7 @@ function setupConnectionEvents(conn, { onPeerConnected, onPeerDisconnected, onLo
     if (onPeerDisconnected) onPeerDisconnected(conn.peer);
 
     // Reconexão automática em caso de oscilação do 4G
-    attemptAutoReconnect(conn.peer, { onPeerConnected, onPeerDisconnected, onLocationReceived, onPingUpdated });
+    attemptAutoReconnect(conn.peer, handlers);
   });
 
   conn.on('error', (err) => {
