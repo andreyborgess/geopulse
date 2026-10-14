@@ -17,66 +17,15 @@ function getAudioContext() {
 }
 
 export function playTactileClick() {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(300, ctx.currentTime + 0.04);
-    gain.gain.setValueAtTime(0.08, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.05);
-  } catch (e) {
-    console.debug('Audio not allowed yet', e);
-  }
+  // Desativado: Operação 100% silenciosa sem cliques ou ruídos ao tocar nos botões e abas
 }
 
 export function playRadarPing() {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(1240, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(620, ctx.currentTime + 0.35);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.36);
-  } catch (e) {
-    console.debug('Audio error', e);
-  }
+  // Desativado: Silencioso ao atualizar radares e membros
 }
 
 export function playGeofenceAlert(isEntering = true) {
-  try {
-    const ctx = getAudioContext();
-    if (!ctx) return;
-    const notes = isEntering ? [523.25, 659.25, 783.99] : [783.99, 587.33, 440];
-    notes.forEach((freq, idx) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      const start = ctx.currentTime + idx * 0.1;
-      osc.type = isEntering ? 'triangle' : 'sawtooth';
-      osc.frequency.setValueAtTime(freq, start);
-      gain.gain.setValueAtTime(0.12, start);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.2);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(start);
-      osc.stop(start + 0.22);
-    });
-  } catch (e) {
-    console.debug('Audio error', e);
-  }
+  // Desativado: Silencioso ao calcular ou alternar lugares e cercas
 }
 
 export function startSOSAlarm() {

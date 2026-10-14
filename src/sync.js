@@ -1,4 +1,4 @@
-// Sincronização em Tempo Real (Cross-Tab via BroadcastChannel + Gerenciamento de Membros)
+// Sincronização em Tempo Real (Cross-Tab via BroadcastChannel + Gerenciamento de Membros com LWW)
 import { calculateBearing } from './geo.js';
 
 const CHANNEL_NAME = 'geopulse_live_channel';
@@ -22,7 +22,7 @@ try {
 // Estado inicial de Lugares Salvos (Sem lugares fictícios - apenas criados pelo usuário)
 export const DEFAULT_SAVED_PLACES = [];
 
-// Estado inicial de Membros de Demonstração (Realistas e Orgânicos)
+// Estado inicial de Membros de Demonstração (apenas caso reset manual seja solicitado)
 export const DEFAULT_DEMO_MEMBERS = [
   {
     id: 'member_mariana',
@@ -41,6 +41,7 @@ export const DEFAULT_DEMO_MEMBERS = [
     activity: '🏠 Em Casa',
     address: 'Adrianópolis, Manaus',
     updatedAt: Date.now() - 1000 * 60 * 4,
+    version: 1,
     history: [
       { lat: -3.1030, lng: -60.0145, time: Date.now() - 1000 * 60 * 30 },
       { lat: -3.1025, lng: -60.0142, time: Date.now() - 1000 * 60 * 4 },
@@ -65,6 +66,7 @@ export const DEFAULT_DEMO_MEMBERS = [
     activity: '🚗 Dirigindo · 44 km/h',
     address: 'Av. Djalma Batista, Manaus',
     updatedAt: Date.now() - 1000 * 35,
+    version: 1,
     history: [
       { lat: -3.0880, lng: -60.0270, time: Date.now() - 1000 * 60 * 10 },
       { lat: -3.0920, lng: -60.0275, time: Date.now() - 1000 * 60 * 4 },
@@ -73,33 +75,20 @@ export const DEFAULT_DEMO_MEMBERS = [
     isMe: false,
     isDemo: true,
   },
-  {
-    id: 'member_carlos',
-    name: 'Carlos',
-    relation: 'Irmão',
-    lat: -3.0990,
-    lng: -59.9880,
-    accuracy: 15,
-    speed: 0,
-    heading: 45,
-    battery: 95,
-    charging: true,
-    color: '#34C759',
-    avatar: 'C',
-    photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-    activity: '🎓 Na Faculdade',
-    address: 'Setor Sul / UFAM, Manaus',
-    updatedAt: Date.now() - 1000 * 60 * 12,
-    history: [
-      { lat: -3.0995, lng: -59.9885, time: Date.now() - 1000 * 60 * 20 },
-      { lat: -3.0990, lng: -59.9880, time: Date.now() - 1000 * 60 * 12 },
-    ],
-    isMe: false,
-    isDemo: true,
-  },
 ];
 
-// Garante migração de "Família Silva" para apenas "Família 👨‍👩‍👧‍👦"
+// Gera circle ID aleatório seguro se não existir
+function generateCircleId() {
+  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `FAMILIA-${rand}`;
+}
+
+let savedCircleId = localStorage.getItem('geopulse_circle_id');
+if (!savedCircleId) {
+  savedCircleId = generateCircleId();
+  localStorage.setItem('geopulse_circle_id', savedCircleId);
+}
+
 let initialCircleName = localStorage.getItem('geopulse_circle_name');
 if (!initialCircleName || initialCircleName === 'Família Silva' || initialCircleName === 'Família') {
   initialCircleName = 'Família 👨‍👩‍👧‍👦';
@@ -108,10 +97,10 @@ if (!initialCircleName || initialCircleName === 'Família Silva' || initialCircl
 
 // Estado dos membros do círculo
 export const state = {
-  circleId: localStorage.getItem('geopulse_circle_id') || 'FAMILIA-01',
+  circleId: savedCircleId,
   circleName: initialCircleName,
   currentUser: {
-    id: localStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).substr(2, 6)}`,
+    id: localStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).slice(2, 8)}`,
     name: localStorage.getItem('geopulse_user_name') || 'Você',
     relation: 'Organizador',
     role: 'Administrador',
@@ -120,11 +109,12 @@ export const state = {
     accuracy: 10,
     speed: 0,
     heading: 0,
-    battery: 90,
+    battery: parseInt(localStorage.getItem('geopulse_user_battery') || '85', 10),
     charging: false,
     updatedAt: Date.now(),
+    version: 1,
     history: [],
-    color: '#007AFF', // Azul Real Apple
+    color: localStorage.getItem('geopulse_user_color') || '#007AFF', // Azul Real Apple
     avatar: localStorage.getItem('geopulse_user_avatar') || 'VC',
     photo: localStorage.getItem('geopulse_user_photo') || '',
     activity: '📍 Parado',
@@ -145,6 +135,9 @@ export function isOnboarded() {
 
 // Salva e persiste os dados do perfil do usuário
 export function saveUserProfile({ name, relation, color, photo, avatar }) {
+  state.currentUser.version = (state.currentUser.version || 1) + 1;
+  state.currentUser.updatedAt = Date.now();
+
   if (name) {
     state.currentUser.name = name;
     localStorage.setItem('geopulse_user_name', name);
@@ -172,6 +165,59 @@ export function saveUserProfile({ name, relation, color, photo, avatar }) {
   localStorage.setItem('geopulse_onboarded', 'true');
 }
 
+/**
+ * Merge com algoritmo Last-Write-Wins (LWW) para Membros
+ * Retorna true se houver alteração
+ */
+export function mergeRemoteMember(remoteUser) {
+  if (!remoteUser || !remoteUser.id || remoteUser.id === state.currentUser.id || remoteUser.isDemo) {
+    return false;
+  }
+
+  const existing = state.members.get(remoteUser.id);
+  const remoteTime = remoteUser.updatedAt || 0;
+  const existingTime = existing?.updatedAt || 0;
+
+  // LWW: Atualiza se for novo ou se o timestamp remoto for mais recente ou igual
+  if (!existing || remoteTime >= existingTime) {
+    state.members.set(remoteUser.id, {
+      ...existing,
+      ...remoteUser,
+      isMe: false,
+      isOnline: remoteUser.isOnline !== false,
+      lastSeen: Date.now(),
+    });
+    saveMembersToStorage();
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Merge com algoritmo Last-Write-Wins (LWW) para Lugares Salvos
+ * Retorna true se houver alteração
+ */
+export function mergeRemotePlace(remotePlace) {
+  if (!remotePlace || !remotePlace.id) return false;
+
+  const idx = state.geofences.findIndex((p) => p.id === remotePlace.id);
+  const remoteTime = remotePlace.updatedAt || 0;
+
+  if (idx === -1) {
+    state.geofences.push(remotePlace);
+    savePlacesToStorage();
+    return true;
+  }
+
+  const existingTime = state.geofences[idx].updatedAt || 0;
+  if (remoteTime >= existingTime) {
+    state.geofences[idx] = { ...state.geofences[idx], ...remotePlace };
+    savePlacesToStorage();
+    return true;
+  }
+  return false;
+}
+
 // Inicializa membros e lugares salvos (somente aparelhos reais conectados)
 export function initAppState() {
   // Salva ID persistente de usuário
@@ -185,20 +231,25 @@ export function initAppState() {
       state.circleId = circleParam;
       localStorage.setItem('geopulse_circle_id', circleParam);
     }
-    if (urlParams.get('join') === '1' && !isOnboarded()) {
-      state.currentUser.relation = 'Membro Convidado';
-      state.currentUser.role = 'Membro';
+    if (urlParams.get('join') === '1') {
+      try {
+        sessionStorage.setItem('geopulse_is_new_join', 'true');
+      } catch (e) {}
+      if (!isOnboarded()) {
+        state.currentUser.relation = 'Membro Convidado';
+        state.currentUser.role = 'Membro';
+      }
     }
   }
 
-  // Inicializa Membros (Remove qualquer membro demo antigo)
+  // Inicializa Membros (Remove membros demo legados)
   const savedMembersJson = localStorage.getItem('geopulse_members_data');
   if (savedMembersJson) {
     try {
       const parsed = JSON.parse(savedMembersJson);
       parsed.forEach((m) => {
-        // Ignora qualquer membro demo
-        if (!m.isDemo && !m.id.startsWith('member_')) {
+        // Preserva todos os membros reais conectados
+        if (!m.isDemo && m.id !== 'member_mariana' && m.id !== 'member_lucas' && m.id !== 'member_carlos') {
           state.members.set(m.id, m);
         }
       });
@@ -208,7 +259,7 @@ export function initAppState() {
   // Salva lista limpa de membros reais no storage
   saveMembersToStorage();
 
-  // Inicializa Lugares Salvos (Apenas criados pelo usuário - remove lugares fictícios)
+  // Inicializa Lugares Salvos (Apenas criados pelo usuário)
   const savedPlacesJson = localStorage.getItem('geopulse_saved_places');
   if (savedPlacesJson) {
     try {
@@ -239,9 +290,6 @@ export function saveMembersToStorage() {
 export function savePlacesToStorage() {
   localStorage.setItem('geopulse_saved_places', JSON.stringify(state.geofences));
 }
-
-// Salva ID persistente de usuário
-localStorage.setItem('geopulse_user_id', state.currentUser.id);
 
 /**
  * Envia atualização do usuário atual para outras abas / instâncias conectadas
@@ -289,32 +337,39 @@ export function broadcastRingLocal(targetId, senderName) {
 /**
  * Escuta atualizações de outras abas ou dispositivos que entrarem no círculo
  */
-export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMemberJoin) {
+export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMemberJoin, onMemberDeleted, onPlaceUpdated) {
   const handlePayload = (payload) => {
     if (!payload || payload.circleId !== state.circleId) return;
 
     if (payload.type === 'USER_UPDATE' && payload.user) {
       if (payload.user.id !== state.currentUser.id) {
         const isNew = !state.members.has(payload.user.id);
-        state.members.set(payload.user.id, {
-          ...payload.user,
-          isMe: false,
-          isVirtual: false,
-        });
-        if (onMemberUpdate) onMemberUpdate(payload.user.id);
+        const changed = mergeRemoteMember(payload.user);
+        if (changed && onMemberUpdate) onMemberUpdate(payload.user.id);
         if (isNew && onMemberJoin) onMemberJoin(payload.user);
         if (payload.user.sos && onSosAlert) {
           onSosAlert(payload.user);
         }
       }
+    } else if (payload.type === 'MEMBER_DELETED' && payload.memberId) {
+      state.members.delete(payload.memberId);
+      saveMembersToStorage();
+      if (onMemberDeleted) onMemberDeleted(payload.memberId);
     } else if ((payload.type === 'SOS_SIGNAL' || payload.type === 'SOS') && payload.user) {
       if (onSosAlert) onSosAlert(payload.user);
     } else if (payload.type === 'RING_DEVICE' && payload.targetId) {
       if (onRingAlert) onRingAlert(payload);
     } else if (payload.type === 'JOIN' && payload.user) {
       if (payload.user.id !== state.currentUser.id && onMemberJoin) {
-        onMemberJoin(payload.user);
+        onMemberJoin(payload.user, !!payload.isNewInvite);
       }
+    } else if (payload.type === 'PLACE_SAVED' && payload.place) {
+      const changed = mergeRemotePlace(payload.place);
+      if (changed && onPlaceUpdated) onPlaceUpdated();
+    } else if (payload.type === 'PLACE_DELETED' && payload.placeId) {
+      state.geofences = state.geofences.filter((x) => x.id !== payload.placeId);
+      savePlacesToStorage();
+      if (onPlaceUpdated) onPlaceUpdated();
     }
   };
 
@@ -329,13 +384,10 @@ export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMe
       try {
         const parsed = JSON.parse(e.newValue);
         handlePayload(parsed);
-      } catch (err) {
-        // ignore
-      }
+      } catch (err) {}
     }
   });
 }
-
 
 /**
  * Permite adicionar um novo membro ou ponto de rastreamento manualmente caso o usuário deseje
@@ -362,11 +414,13 @@ export function addCustomMember(name, role, lat, lng, color = '#1F6C9F') {
     avatar: initials || 'PT',
     history: [{ lat, lng, time: Date.now() }],
     updatedAt: Date.now(),
+    version: 1,
     isMe: false,
     isVirtual: false,
   };
 
   state.members.set(id, newMember);
+  saveMembersToStorage();
   return newMember;
 }
 
@@ -375,14 +429,19 @@ export function addCustomMember(name, role, lat, lng, color = '#1F6C9F') {
  */
 export function removeMember(id) {
   state.members.delete(id);
+  saveMembersToStorage();
   const payload = {
     type: 'MEMBER_DELETED',
     circleId: state.circleId,
     memberId: id,
+    ts: Date.now(),
   };
   if (channel) {
     channel.postMessage(payload);
   }
+  try {
+    localStorage.setItem('geopulse_last_broadcast', JSON.stringify(payload));
+  } catch (e) {}
 }
 
 /**
@@ -399,7 +458,7 @@ export function clearAllMembers() {
 export function resetToDemoMembers() {
   state.members.clear();
   DEFAULT_DEMO_MEMBERS.forEach((m) => {
-    state.members.set(m.id, { ...m, updatedAt: Date.now() });
+    state.members.set(m.id, { ...m, updatedAt: Date.now(), version: 1 });
   });
   saveMembersToStorage();
 }
@@ -428,6 +487,8 @@ export function updateUserProfile(name, photo = '') {
     .map((w) => w[0].toUpperCase())
     .join('');
   state.currentUser.avatar = initials || 'VC';
+  state.currentUser.version = (state.currentUser.version || 1) + 1;
+  state.currentUser.updatedAt = Date.now();
 
   localStorage.setItem('geopulse_user_name', state.currentUser.name);
   localStorage.setItem('geopulse_user_photo', state.currentUser.photo);
@@ -440,8 +501,35 @@ export function updateUserProfile(name, photo = '') {
  * Adiciona um novo Lugar Salvo (Casa, Trabalho, Escola, etc.)
  */
 export function addSavedPlace(place) {
-  state.geofences.push(place);
+  if (!place.updatedAt) place.updatedAt = Date.now();
+  if (!place.createdBy) place.createdBy = state.currentUser.id;
+  if (!place.version) place.version = 1;
+
+  const existingIdx = state.geofences.findIndex((p) => p.id === place.id);
+  if (existingIdx === -1) {
+    state.geofences.push(place);
+  } else {
+    place.version = (state.geofences[existingIdx].version || 1) + 1;
+    state.geofences[existingIdx] = { ...state.geofences[existingIdx], ...place };
+  }
   savePlacesToStorage();
+
+  const payload = {
+    type: 'PLACE_SAVED',
+    circleId: state.circleId,
+    place,
+    senderId: state.currentUser.id,
+    ts: Date.now(),
+  };
+  if (channel) {
+    try {
+      channel.postMessage(payload);
+    } catch (e) {}
+  }
+  try {
+    localStorage.setItem('geopulse_last_broadcast', JSON.stringify(payload));
+  } catch (e) {}
+
   return place;
 }
 
@@ -451,5 +539,20 @@ export function addSavedPlace(place) {
 export function removeSavedPlace(id) {
   state.geofences = state.geofences.filter((g) => g.id !== id);
   savePlacesToStorage();
-}
 
+  const payload = {
+    type: 'PLACE_DELETED',
+    circleId: state.circleId,
+    placeId: id,
+    senderId: state.currentUser.id,
+    ts: Date.now(),
+  };
+  if (channel) {
+    try {
+      channel.postMessage(payload);
+    } catch (e) {}
+  }
+  try {
+    localStorage.setItem('geopulse_last_broadcast', JSON.stringify(payload));
+  } catch (e) {}
+}

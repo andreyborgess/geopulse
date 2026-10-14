@@ -1,7 +1,7 @@
-// Módulo WebRTC P2P de Rastreamento Direto em Tempo Real com PeerJS
+// Módulo WebRTC P2P de Rastreamento Direto em Tempo Real com PeerJS e Criptografia E2E
 import { Peer } from 'peerjs';
-import mqtt from 'mqtt';
-import { state, saveMembersToStorage } from './sync.js';
+import { state, saveMembersToStorage, mergeRemoteMember } from './sync.js';
+import { encryptPayload, decryptPayload } from './crypto.js';
 
 let peerInstance = null;
 let activeLivePeerId = '';
@@ -34,7 +34,6 @@ export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocation
   const circleKey = state.circleId.replace(/[^a-zA-Z0-9]/g, '') || 'FAMILIA01';
   const myShortId = state.currentUser.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6);
 
-  // Sufixo único por sessão para evitar colisões no servidor público PeerJS ao recarregar a página
   let sessionToken = '';
   try {
     sessionToken = sessionStorage.getItem('geopulse_p2p_sess') || Math.random().toString(36).slice(2, 6);
@@ -61,9 +60,8 @@ export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocation
 
     peer.on('open', (assignedId) => {
       activeLivePeerId = assignedId;
-      console.log('[P2P] Nó ativo conectado à rede com ID:', assignedId);
+      console.log('[P2P] Nó ativo conectado com ID:', assignedId);
 
-      // Conexão automática caso a URL contenha o nó que gerou o convite/QR Code
       if (typeof window !== 'undefined' && window.location.search) {
         const urlParams = new URLSearchParams(window.location.search);
         const targetPeer = urlParams.get('peer');
@@ -82,7 +80,6 @@ export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocation
 
     peer.on('error', (err) => {
       console.warn('[P2P Error]', err);
-      // Se ID já estiver reservado no servidor, conecta com ID dinâmico livre
       if (err.type === 'unavailable-id') {
         try {
           peer.destroy();
@@ -101,15 +98,20 @@ export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocation
     getMyPeerId: () => activeLivePeerId || peerInstance?.id || myPeerId,
     broadcastPosition: (userData) => sendP2PBroadcast({ type: 'LOCATION', data: userData }),
     broadcastSOS: (sosData) => sendP2PBroadcast({ type: 'SOS', user: state.currentUser, data: sosData }),
-    broadcastRingDevice: (targetId) => sendP2PBroadcast({ type: 'RING_DEVICE', targetId, senderName: state.currentUser.name, senderId: state.currentUser.id }),
+    broadcastRingDevice: (targetId) =>
+      sendP2PBroadcast({
+        type: 'RING_DEVICE',
+        targetId,
+        senderName: state.currentUser.name,
+        senderId: state.currentUser.id,
+      }),
+    broadcastMemberDeleted: (memberId) =>
+      sendP2PBroadcast({ type: 'MEMBER_DELETED', memberId, senderId: state.currentUser.id }),
     connectTo: (peerId) => connectToRemotePeer(peerId, handlers),
     getConnectionCount: () => activeConnections.size,
   };
 }
 
-/**
- * Conecta ativamente a outro dispositivo via WebRTC
- */
 export function connectToRemotePeer(targetPeerId, handlers, retryCount = 0) {
   if (!peerInstance || !targetPeerId || activeConnections.has(targetPeerId)) return;
 
@@ -121,10 +123,8 @@ export function connectToRemotePeer(targetPeerId, handlers, retryCount = 0) {
     if (conn) {
       setupConnectionEvents(conn, handlers);
 
-      // Tenta uma reconexão preventiva após 3.5s se não abrir de primeira
       setTimeout(() => {
         if (!activeConnections.has(targetPeerId) && retryCount < 2) {
-          console.log('[P2P] Tentando conectar novamente ao peer:', targetPeerId);
           connectToRemotePeer(targetPeerId, handlers, retryCount + 1);
         }
       }, 3500);
@@ -134,31 +134,36 @@ export function connectToRemotePeer(targetPeerId, handlers, retryCount = 0) {
   }
 }
 
-/**
- * Configura eventos do canal de dados WebRTC bidirecional
- */
 function setupConnectionEvents(conn, handlers = {}) {
   const { onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated } = handlers;
-  conn.on('open', () => {
+
+  conn.on('open', async () => {
     activeConnections.set(conn.peer, conn);
     console.log('[P2P] Canal conectado com:', conn.peer);
 
-    // Envia apresentação inicial e posição GPS atualizada
-    conn.send({
+    let isNewInvite = false;
+    try {
+      isNewInvite = sessionStorage.getItem('geopulse_is_new_join') === 'true';
+    } catch (e) {}
+
+    const handshakePayload = await encryptPayload({
       type: 'HANDSHAKE',
       user: state.currentUser,
+      isNewInvite,
       ts: Date.now(),
     });
-    conn.send({
+    conn.send(handshakePayload);
+
+    const locationPayload = await encryptPayload({
       type: 'LOCATION',
       data: state.currentUser,
     });
+    conn.send(locationPayload);
 
     if (onPeerConnected) {
-      onPeerConnected(conn.peer);
+      onPeerConnected(conn.peer, false);
     }
 
-    // Ping periódico para monitorar latência em milissegundos
     const pingInterval = setInterval(() => {
       if (conn.open) {
         conn.send({ type: 'PING', start: Date.now() });
@@ -168,41 +173,41 @@ function setupConnectionEvents(conn, handlers = {}) {
     }, 5000);
   });
 
-  conn.on('data', (payload) => {
+  conn.on('data', async (rawPayload) => {
+    if (!rawPayload) return;
+
+    // Decifra envelope E2E
+    const payload = await decryptPayload(rawPayload);
     if (!payload) return;
 
     if (payload.type === 'HANDSHAKE' && payload.user) {
-      const isNew = !state.members.has(payload.user.id);
-      // Registra o outro aparelho como membro real ativo no círculo
-      state.members.set(payload.user.id, {
+      const isKnown = state.members.has(payload.user.id);
+      mergeRemoteMember({
         ...payload.user,
         peerId: conn.peer,
-        isMe: false,
         isP2P: true,
-        isDemo: false,
       });
-      saveMembersToStorage();
 
       // Retribui a posição atualizada imediatamente
-      conn.send({ type: 'LOCATION', data: state.currentUser });
+      encryptPayload({ type: 'LOCATION', data: state.currentUser }).then((enc) => conn.send(enc));
+
       if (onLocationReceived) onLocationReceived(payload.user);
-      if (isNew && onPeerConnected) onPeerConnected(payload.user);
+      const isFirstTimeInvite = !!payload.isNewInvite && !isKnown;
+      if (onPeerConnected) onPeerConnected(payload.user, isFirstTimeInvite);
     } else if (payload.type === 'LOCATION' && payload.data) {
-      // Atualização contínua de posição de quem está se movimentando
-      state.members.set(payload.data.id, {
+      mergeRemoteMember({
         ...payload.data,
         peerId: conn.peer,
-        isMe: false,
         isP2P: true,
-        isDemo: false,
       });
-      saveMembersToStorage();
       if (onLocationReceived) onLocationReceived(payload.data);
     } else if (payload.type === 'SOS') {
-      console.warn('[P2P] Alerta SOS recebido:', payload);
       if (onSOSReceived) onSOSReceived(payload);
+    } else if (payload.type === 'MEMBER_DELETED' && payload.memberId) {
+      state.members.delete(payload.memberId);
+      saveMembersToStorage();
+      if (onPeerDisconnected) onPeerDisconnected(payload.memberId);
     } else if (payload.type === 'RING_DEVICE') {
-      console.log('[P2P] Alerta sonoro de localização recebido:', payload);
       if (onRingReceived) onRingReceived(payload);
     } else if (payload.type === 'PING') {
       conn.send({ type: 'PONG', start: payload.start });
@@ -214,10 +219,7 @@ function setupConnectionEvents(conn, handlers = {}) {
 
   conn.on('close', () => {
     activeConnections.delete(conn.peer);
-    console.log('[P2P] Conexão encerrada com:', conn.peer);
     if (onPeerDisconnected) onPeerDisconnected(conn.peer);
-
-    // Reconexão automática em caso de oscilação do 4G
     attemptAutoReconnect(conn.peer, handlers);
   });
 
@@ -230,20 +232,17 @@ function attemptAutoReconnect(peerId, handlers) {
   if (reconnectTimer) clearTimeout(reconnectTimer);
   reconnectTimer = setTimeout(() => {
     if (peerInstance && !activeConnections.has(peerId)) {
-      console.log('[P2P] Tentando reconectar automaticamente ao nó:', peerId);
       connectToRemotePeer(peerId, handlers);
     }
   }, 4000);
 }
 
-/**
- * Transmite uma mensagem para todos os aparelhos conectados via WebRTC
- */
-function sendP2PBroadcast(message) {
+async function sendP2PBroadcast(message) {
+  const encMessage = await encryptPayload(message);
   activeConnections.forEach((conn) => {
     if (conn.open) {
       try {
-        conn.send(message);
+        conn.send(encMessage);
       } catch (e) {
         console.warn('[P2P Send Error]', e);
       }

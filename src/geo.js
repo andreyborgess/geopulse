@@ -89,23 +89,7 @@ export async function reverseGeocode(lat, lon) {
   return fallback;
 }
 
-/**
- * Obtém o status da bateria do dispositivo atual (ou estimativa)
- */
-export async function getDeviceBattery() {
-  if ('getBattery' in navigator) {
-    try {
-      const battery = await navigator.getBattery();
-      return {
-        level: Math.round(battery.level * 100),
-        charging: battery.charging,
-      };
-    } catch {
-      // Ignora erro
-    }
-  }
-  return { level: 86, charging: false };
-}
+
 
 /**
  * Busca endereços, ruas e bairros usando OpenStreetMap Nominatim

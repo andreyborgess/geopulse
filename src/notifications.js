@@ -262,17 +262,19 @@ export async function notifyFindMyRing(senderName = 'Alguém da família') {
 /**
  * Dispara notificação push de Cerca Virtual ou Saída de Área
  */
-export async function notifyGeofenceEvent(memberName, action, fenceName) {
+export async function notifyGeofenceEvent(memberName, action, fenceName, fenceIcon = '') {
   const prefs = getNotificationPreferences();
   if (prefs.fence === false) return;
 
-  const title = '📍 Aviso de Movimentação';
-  const body = `${memberName} ${action} ${fenceName}.`;
+  const icon = fenceIcon || (action.includes('chegou') ? '🏠' : '📍');
+  const title = `${icon} ${memberName} ${action} ${fenceName}`;
+  const body = 'Círculo Família 👨‍👩‍👧‍👦 · Localização em tempo real';
 
   await dispatchDeviceNotification(title, {
     body,
     tag: 'geopulse-fence-' + Date.now(),
     vibrate: [200, 100, 200],
+    requireInteraction: false,
   });
 }
 

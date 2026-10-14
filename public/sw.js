@@ -211,3 +211,17 @@ self.addEventListener('message', (event) => {
   }
 });
 
+// Periodic Background Sync (mantém sincronização periódica de GPS mesmo com o navegador em 2º plano)
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === 'geopulse-gps-sync') {
+    event.waitUntil(
+      (async () => {
+        const clientsList = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+        for (const client of clientsList) {
+          client.postMessage({ type: 'REQUEST_GPS_SYNC' });
+        }
+      })()
+    );
+  }
+});
+

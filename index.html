@@ -67,6 +67,12 @@
 
           <!-- Ações Rápidas à Direita -->
           <div class="header-actions">
+            <!-- Indicador Visual de Conexão & Criptografia E2E -->
+            <div class="network-pill online" id="network-status-badge" title="Criptografia E2E Ativa · Conectado">
+              <span class="network-dot"></span>
+              <span class="network-label">E2E</span>
+            </div>
+
             <!-- Botão Compartilhar Círculo (WhatsApp, Link) -->
             <button class="btn-apple-icon" id="btn-share-circle" title="Compartilhar Círculo (WhatsApp, Link)">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -144,7 +150,7 @@
           <!-- Controles Flutuantes Estilo Apple Maps (À Direita) -->
           <div class="apple-map-controls">
             <!-- Seletor de Camada -->
-            <button class="btn-map-control" id="btn-layer-toggle" title="Alterar Camada do Mapa">
+            <button class="btn-map-control" id="btn-layer-toggle" title="Alterar Estilo do Mapa">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
                 <polyline points="2 17 12 22 22 17"></polyline>
@@ -153,26 +159,45 @@
             </button>
             <div class="layer-popup-menu" id="layer-popup-menu" style="display: none;">
               <button class="layer-opt active" id="btn-layer-dark">
-                <span>Modo Escuro</span>
+                <span class="layer-icon">🌙</span>
+                <span>Modo Escuro HD</span>
               </button>
               <button class="layer-opt" id="btn-layer-satellite">
-                <span>Satélite Real</span>
+                <span class="layer-icon">🛰️</span>
+                <span>Satélite Híbrido HD</span>
               </button>
               <button class="layer-opt" id="btn-layer-streets">
-                <span>Ruas Clássico</span>
+                <span class="layer-icon">🗺️</span>
+                <span>Ruas Vibrante</span>
               </button>
             </div>
 
-            <!-- Centralizar em Manaus -->
-            <button class="btn-map-control" id="btn-goto-manaus" title="Centralizar em Manaus">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <circle cx="12" cy="12" r="10"></circle>
-                <polygon points="12 8 8 12 12 16 12 8"></polygon>
+            <!-- Bússola / Resetar Norte -->
+            <button class="btn-map-control" id="btn-map-compass" title="Apontar para o Norte">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" id="compass-needle-svg">
+                <polygon points="12 2 15 11 12 9 9 11 12 2" fill="#FF3B30" stroke="#FF3B30"></polygon>
+                <polygon points="12 22 15 13 12 15 9 13 12 22" fill="#8E8E93" stroke="#8E8E93"></polygon>
+                <circle cx="12" cy="12" r="1.5" fill="#FFFFFF"></circle>
               </svg>
             </button>
 
+            <!-- Bloco de Zoom + e - Estilo Apple Maps -->
+            <div class="map-zoom-group">
+              <button class="btn-map-control btn-zoom" id="btn-map-zoom-in" title="Aproximar Zoom">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+              <button class="btn-map-control btn-zoom" id="btn-map-zoom-out" title="Afastar Zoom">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="16" height="16">
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+              </button>
+            </div>
+
             <!-- Enquadrar Todos no Círculo -->
-            <button class="btn-map-control" id="btn-fit-all" title="Ver Todos no Mapa">
+            <button class="btn-map-control" id="btn-fit-all" title="Ver Toda a Família no Mapa">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
               </svg>
@@ -189,11 +214,11 @@
           <!-- Telemetria Flutuante Discreta (Rodapé do Mapa) -->
           <div class="map-status-pill" id="map-status-pill">
             <span class="live-dot pulse"></span>
-            <span id="hud-gps-status">GPS Conectado</span>
+            <span id="hud-gps-status">GPS Ao Vivo</span>
             <span class="pill-divider">·</span>
-            <span id="hud-battery">88%</span>
+            <span id="hud-live-address">Localizando...</span>
             <span class="pill-divider">·</span>
-            <span id="p2p-status-val">Rede Ativa</span>
+            <span id="p2p-status-val">Família Conectada</span>
           </div>
         </div>
 
@@ -290,10 +315,6 @@
           <!-- Grade de Informações de Telemetria -->
           <div class="member-telemetry-grid">
             <div class="telemetry-box">
-              <span class="telemetry-label">Bateria</span>
-              <strong class="telemetry-val" id="detail-battery">88%</strong>
-            </div>
-            <div class="telemetry-box">
               <span class="telemetry-label">Velocidade</span>
               <strong class="telemetry-val" id="detail-speed">0 km/h</strong>
             </div>
@@ -338,6 +359,17 @@
                 <line x1="10" y1="14" x2="21" y2="3"></line>
               </svg>
               <span>Google Maps</span>
+            </button>
+          </div>
+
+          <!-- Opção de Remover Membro do Círculo -->
+          <div class="member-remove-row" id="wrap-remove-member" style="margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: center;">
+            <button type="button" class="btn-subtle-link text-danger" id="btn-action-remove-member" style="color: var(--status-red); font-size: 13px; font-weight: 600;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+                <polyline points="3 6 5 6 21 6"></polyline>
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+              </svg>
+              <span>Remover Membro do Círculo</span>
             </button>
           </div>
         </div>

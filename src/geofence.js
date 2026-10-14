@@ -24,13 +24,15 @@ export function checkGeofences(geofences, allMembers, onEvent) {
         memberZoneState.set(stateKey, isInside);
         const eventType = isInside ? 'ENTERED' : 'EXITED';
 
-        playGeofenceAlert(isInside);
-
         if (onEvent) {
           onEvent({
             type: eventType,
+            memberId: member.id,
             memberName: member.name,
+            isMe: !!member.isMe,
+            fenceId: fence.id,
             fenceName: fence.name,
+            fenceIcon: fence.icon || (eventType === 'ENTERED' ? '🏠' : '📍'),
             fenceColor: fence.color,
             distance: Math.round(dist),
             timestamp: Date.now(),
