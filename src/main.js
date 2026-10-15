@@ -6,6 +6,7 @@ import {
   initAppState,
   broadcastUserUpdate,
   broadcastRingLocal,
+  broadcastCheckinLocal,
   listenToBroadcasts,
   saveMembersToStorage,
   savePlacesToStorage,
@@ -45,6 +46,17 @@ import {
   openProfileModal,
 } from './modals.js';
 import {
+  openARFinder,
+  closeARFinder,
+  toggleARTorch,
+} from './arFinder.js';
+import {
+  initChatUI,
+  openChatModal,
+  closeChatModal,
+  handleIncomingChatMessage,
+} from './chat.js';
+import {
   setupOnboardingModal,
   checkAutoOpenOnboarding,
 } from './onboarding.js';
@@ -60,6 +72,7 @@ import {
   broadcastLocation,
   broadcastSOS,
   broadcastGeofenceAlert,
+  broadcastCheckin,
 } from './realtime.js';
 import {
   initP2PNetwork,
@@ -78,6 +91,7 @@ import {
   stopSOSAlarm,
   playFindMyChime,
   stopFindMyChime,
+  playCheckinSuccess,
 } from './audio.js';
 import {
   notifySOSAlert,
@@ -89,6 +103,52 @@ import {
 import { eventBus } from './eventBus.js';
 
 let p2pEngine = null;
+
+/* =========================================================
+   CHECK-IN RÁPIDO ("CHEGUEI BEM 💚")
+========================================================= */
+function triggerQuickCheckin() {
+  playTactileClick();
+  playCheckinSuccess();
+  if (navigator.vibrate) {
+    try { navigator.vibrate([40, 60, 80]); } catch (e) {}
+  }
+
+  const msg = 'Cheguei bem! 💚';
+  state.currentUser.activity = '💚 Chegou bem!';
+  broadcastCheckin(msg);
+  broadcastCheckinLocal(msg);
+
+  showToast('💚 Você avisou a Família que chegou bem!', 'info');
+
+  const btnText = document.querySelector('#btn-trigger-checkin span');
+  if (btnText) {
+    btnText.textContent = 'Avisado ✓';
+    setTimeout(() => {
+      if (btnText) btnText.textContent = 'Avisar';
+    }, 4000);
+  }
+
+  renderMembersList();
+  updateMarkerForMember(state.currentUser);
+}
+
+function handleIncomingCheckin(payload) {
+  if (!payload || !payload.user) return;
+  const name = payload.user.name || 'Membro da Família';
+  playCheckinSuccess();
+  if (navigator.vibrate) {
+    try { navigator.vibrate([60, 80]); } catch (e) {}
+  }
+  showToast(`💚 ${name} avisou: ${payload.message || 'Cheguei bem!'}`, 'info');
+
+  const member = state.members.get(payload.user.id);
+  if (member) {
+    member.activity = '💚 Chegou bem!';
+    renderMembersList();
+    updateMarkerForMember(member);
+  }
+}
 
 /* =========================================================
    SISTEMA DE EMERGÊNCIA SOS & FIND MY RING
@@ -352,7 +412,9 @@ function setupNetworkConnections() {
     () => {
       renderPlaceOverlays();
       renderPlacesList();
-    }
+    },
+    (checkinPayload) => handleIncomingCheckin(checkinPayload),
+    (chatPayload) => handleIncomingChatMessage(chatPayload)
   );
 
   // 2. WebRTC P2P
@@ -410,6 +472,8 @@ function setupNetworkConnections() {
     },
     onSOSReceived: (payload) => handleIncomingSOS(payload),
     onRingReceived: (payload) => handleIncomingRing(payload),
+    onCheckinReceived: (payload) => handleIncomingCheckin(payload),
+    onChatMessageReceived: (payload) => handleIncomingChatMessage(payload),
     onStatusChanged: ({ status, broker, pendingCount }) => {
       const p2pVal = document.getElementById('p2p-status-val');
       const networkBadge = document.getElementById('network-status-badge');
@@ -505,6 +569,11 @@ function bindEventBus() {
     if (banner) banner.style.display = 'none';
     if (state.currentUser.sos) triggerSOS();
   });
+
+  // Visor Câmera com Realidade Aumentada (AR Precision Finding)
+  eventBus.on('member:ar-finder', (member) => {
+    openARFinder(member);
+  });
 }
 
 // Aviso preventivo para manter rastreamento familiar no celular
@@ -543,6 +612,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindEventBus();
   setupNetworkConnections();
   updateNotificationUI();
+
+  // Listener para botão de Check-in Rápido ("Cheguei Bem 💚")
+  document.getElementById('btn-trigger-checkin')?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    triggerQuickCheckin();
+  });
+  document.getElementById('btn-quick-checkin')?.addEventListener('click', () => {
+    triggerQuickCheckin();
+  });
+
+  // Controles do Visor Câmera AR
+  document.getElementById('btn-close-ar')?.addEventListener('click', () => {
+    closeARFinder();
+  });
+  document.getElementById('btn-ar-torch')?.addEventListener('click', async () => {
+    await toggleARTorch();
+  });
+
+  // Inicializa Chat Privado Criptografado E2E
+  initChatUI();
 
   checkAutoOpenOnboarding();
 

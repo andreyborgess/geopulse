@@ -87,7 +87,7 @@ export async function getOrRegisterSubscription(publicKey = DEFAULT_VAPID_PUBLIC
       return subscription;
     }
   } catch (err) {
-    console.warn('[Push] Falha ao obter subscrição do PushManager:', err);
+    console.debug('[Push] PushManager nativo em modo local/standalone:', err?.message || err);
   }
 
   // Se não foi possível gerar via VAPID ou deu erro de chave pública, verifica se há no storage

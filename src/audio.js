@@ -21,7 +21,24 @@ export function playTactileClick() {
 }
 
 export function playRadarPing() {
-  // Desativado: Silencioso ao atualizar radares e membros
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1320, now);
+    osc.frequency.exponentialRampToValueAtTime(1760, now + 0.12);
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.19);
+  } catch (e) {
+    console.debug('Radar ping audio error', e);
+  }
 }
 
 export function playGeofenceAlert(isEntering = true) {
@@ -106,6 +123,61 @@ export function stopFindMyChime() {
   if (ringInterval) {
     clearInterval(ringInterval);
     ringInterval = null;
+  }
+}
+
+/**
+ * Chime suave e harmônico para confirmação de Check-in ("Cheguei Bem 💚")
+ */
+export function playCheckinSuccess() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    // Três notas ascendentes suaves estilo Apple Pay / Find My (E5, G#5, B5)
+    const tones = [
+      { freq: 659.25, time: now + 0.0, dur: 0.16 },
+      { freq: 830.61, time: now + 0.12, dur: 0.2 },
+      { freq: 987.77, time: now + 0.24, dur: 0.38 },
+    ];
+    tones.forEach(({ freq, time, dur }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, time);
+      gain.gain.setValueAtTime(0.18, time);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + dur);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(time);
+      osc.stop(time + dur + 0.02);
+    });
+  } catch (e) {
+    console.debug('Checkin chime error', e);
+  }
+}
+
+/**
+ * Chime suave estilo iMessage para nova mensagem recebida no Chat E2E
+ */
+export function playChatMessageSound() {
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, now);
+    osc.frequency.exponentialRampToValueAtTime(1320, now + 0.08);
+    gain.gain.setValueAtTime(0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  } catch (e) {
+    console.debug('Chat message sound error', e);
   }
 }
 

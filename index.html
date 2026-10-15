@@ -82,6 +82,14 @@
               </svg>
             </button>
 
+            <!-- Botão Chat Privado Criptografado E2E -->
+            <button class="btn-apple-icon" id="btn-open-chat-modal" title="Chat Privado Criptografado E2E">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span class="header-notif-dot chat-badge" id="header-chat-dot" style="display: none;"></span>
+            </button>
+
             <!-- Botão Central de Notificações Push & APNs -->
             <button class="btn-apple-icon" id="btn-open-notifications-modal" title="Central de Notificações Push & APNs">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -246,6 +254,23 @@
 
           <!-- Conteúdo da Aba 1: Pessoas -->
           <div class="sheet-content-panel active" id="panel-people">
+            <!-- Ação Rápida: Avisar que Cheguei Bem 💚 -->
+            <div class="quick-checkin-card" id="btn-quick-checkin" title="Avisar a todos da Família que você chegou bem com 1 toque">
+              <div class="checkin-lead">
+                <div class="checkin-icon-badge">💚</div>
+                <div class="checkin-info">
+                  <strong class="checkin-title">Avisar que Cheguei Bem</strong>
+                  <span class="checkin-subtitle">Check-in com 1 toque para o Círculo</span>
+                </div>
+              </div>
+              <button class="btn-checkin-send" id="btn-trigger-checkin" type="button">
+                <span>Avisar</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </button>
+            </div>
+
             <div class="members-cards-container" id="members-list">
               <!-- Renderizado dinamicamente via JavaScript -->
             </div>
@@ -336,6 +361,21 @@
                 <polygon points="3 11 22 2 13 21 11 13 3 11"></polygon>
               </svg>
               <span>Traçar Rota</span>
+            </button>
+
+            <button class="btn-apple-action secondary" id="btn-action-ar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle>
+              </svg>
+              <span>Câmera AR</span>
+            </button>
+
+            <button class="btn-apple-action secondary" id="btn-action-chat">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              <span>Chat Seguro</span>
             </button>
 
             <button class="btn-apple-action secondary" id="btn-action-ping">
@@ -530,7 +570,7 @@
               <div class="join-code-box" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle);">
                 <span class="field-label" style="display: block; margin-bottom: 6px;">Ou entrar no círculo de outro celular:</span>
                 <div class="share-link-row" style="margin-bottom: 0;">
-                  <input type="text" id="input-join-circle-code" placeholder="Ex: FAMILIA-02" style="text-transform: uppercase;" />
+                  <input type="text" id="input-join-circle-code" placeholder="Cole o link de convite ou código" />
                   <button class="btn-apple-action secondary" id="btn-submit-join-circle">Conectar</button>
                 </div>
               </div>
@@ -899,6 +939,169 @@
             <span id="sos-details">Transmissão prioritária de emergência em andamento</span>
           </div>
           <button class="btn-sos-dismiss" id="btn-dismiss-sos">Encerrar</button>
+        </div>
+      </div>
+
+      <!-- MODAL CÂMERA COM REALIDADE AUMENTADA (AR PRECISION FINDING ESTILO AIRTAG) -->
+      <div class="ar-finder-modal" id="modal-ar-finder" style="display: none;">
+        <!-- Câmera ao vivo de fundo -->
+        <video id="ar-video-feed" playsinline autoplay muted></video>
+
+        <!-- Radar Fallback caso a câmera não esteja disponível -->
+        <div class="ar-fallback-hud" id="ar-fallback-hud" style="display: none;">
+          <div class="radar-scan-line"></div>
+          <div class="radar-grid-rings">
+            <span class="ring r1"></span>
+            <span class="ring r2"></span>
+            <span class="ring r3"></span>
+          </div>
+          <span class="ar-fallback-label">Radar Direcional 3D</span>
+        </div>
+
+        <!-- Grade de mira holográfica e vinheta -->
+        <div class="ar-hologram-overlay">
+          <div class="ar-scanline-fx"></div>
+        </div>
+
+        <!-- Barra Superior: Info do Membro, Lanterna e Fechar -->
+        <div class="ar-top-bar">
+          <button type="button" class="btn-ar-control" id="btn-close-ar" title="Fechar Visor AR">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="20" height="20">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+
+          <div class="ar-target-badge">
+            <div class="ar-target-avatar" id="ar-target-avatar">MS</div>
+            <div class="ar-target-meta">
+              <span class="ar-target-title">Localizando Alvo</span>
+              <strong class="ar-target-name" id="ar-target-name">Mariana</strong>
+            </div>
+          </div>
+
+          <button type="button" class="btn-ar-control" id="btn-ar-torch" title="Ligar / Desligar Lanterna">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Centro da Tela: Retículo Holográfico, Seta 3D e Distância -->
+        <div class="ar-center-stage">
+          <div class="ar-reticle-ring" id="ar-reticle-ring">
+            <div class="reticle-notch top"></div>
+            <div class="reticle-notch bottom"></div>
+            <div class="reticle-notch left"></div>
+            <div class="reticle-notch right"></div>
+
+            <!-- Seta 3D Giratória -->
+            <div class="ar-arrow-anchor">
+              <div class="ar-direction-arrow" id="ar-direction-arrow">
+                <svg viewBox="0 0 100 120" width="100" height="120" class="arrow-svg">
+                  <defs>
+                    <linearGradient id="arArrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" stop-color="#34C759" />
+                      <stop offset="100%" stop-color="#007AFF" />
+                    </linearGradient>
+                    <filter id="arArrowGlow" x="-30%" y="-30%" width="160%" height="160%">
+                      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#34C759" flood-opacity="0.8"/>
+                    </filter>
+                  </defs>
+                  <path d="M50 8 L90 70 L58 60 L58 112 L42 112 L42 60 L10 70 Z" fill="url(#arArrowGrad)" filter="url(#arArrowGlow)" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <!-- Distância Grande estilo Apple Find My -->
+          <div class="ar-distance-readout-wrap">
+            <div class="ar-distance-readout" id="ar-distance-readout">0 m</div>
+            <div class="ar-distance-caption">DISTÂNCIA ESTIMADA</div>
+          </div>
+
+          <!-- Dica Dinâmica de Giro do Corpo -->
+          <div class="ar-hint-pill" id="ar-angle-hint">
+            <span>Aguardando sinal de bússola...</span>
+          </div>
+        </div>
+
+        <!-- Barra Inferior: Mini-Radar Espacial e Status do Sensor -->
+        <div class="ar-bottom-dock">
+          <div class="ar-mini-radar">
+            <div class="radar-disc">
+              <div class="radar-crosshair-h"></div>
+              <div class="radar-crosshair-v"></div>
+              <div class="radar-center-dot"></div>
+              <div class="ar-radar-target-dot" id="ar-radar-target-dot"></div>
+            </div>
+            <div class="ar-radar-meta">
+              <span class="ar-radar-label">PRECISION FINDING 3D</span>
+              <span class="ar-radar-status">Bússola & Giroscópio 60 FPS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL CHAT PRIVADO CRIPTOGRAFADO E2E -->
+      <div class="modal-backdrop chat-modal-backdrop" id="modal-chat" style="display: none;">
+        <div class="modal-card-shell chat-card-shell">
+          <div class="modal-card-core chat-card-core">
+            <!-- Header do Chat -->
+            <div class="modal-header chat-modal-header">
+              <div class="modal-header-info">
+                <div class="chat-header-security-badge">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                  <span>AES-256 E2E ZERO-KNOWLEDGE</span>
+                </div>
+                <h3 id="chat-target-title">Círculo Familiar 👨‍👩‍👧‍👦</h3>
+                <span class="chat-target-sub" id="chat-target-sub">Família Conectada · Chat Seguro</span>
+              </div>
+              <button class="modal-close" id="btn-close-chat-modal" title="Fechar Chat">&times;</button>
+            </div>
+
+            <!-- Seletor de Conversa (Círculo ou 1-to-1) -->
+            <div class="chat-threads-bar">
+              <div class="chat-threads-tabs" id="chat-threads-tabs">
+                <!-- Preenchido via JavaScript -->
+              </div>
+            </div>
+
+            <!-- Área de Mensagens com Rolagem -->
+            <div class="chat-messages-container" id="chat-messages-container">
+              <!-- Preenchido via JavaScript -->
+            </div>
+
+            <!-- Respostas Rápidas com 1 Toque -->
+            <div class="chat-quick-chips-row">
+              <button type="button" class="chat-quick-chip" data-msg="Cheguei bem! 💚">💚 Cheguei bem</button>
+              <button type="button" class="chat-quick-chip" data-msg="Onde você está? 📍">📍 Onde você está?</button>
+              <button type="button" class="chat-quick-chip" data-msg="A caminho! 🚗">🚗 A caminho</button>
+              <button type="button" class="chat-quick-chip" data-msg="Tudo certo! 👍">👍 Tudo certo</button>
+              <button type="button" class="chat-quick-chip" data-msg="Preciso de ajuda! 🆘">🆘 Ajuda</button>
+            </div>
+
+            <!-- Barra de Envio de Mensagem -->
+            <div class="chat-input-bar">
+              <input
+                type="text"
+                id="chat-input-text"
+                class="chat-input-field"
+                placeholder="Mensagem criptografada..."
+                maxlength="500"
+                autocomplete="off"
+              />
+              <button type="button" class="btn-chat-send" id="btn-send-chat" title="Enviar Mensagem">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="18" height="18">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

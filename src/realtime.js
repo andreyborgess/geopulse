@@ -2,7 +2,7 @@
 // Multi-Broker Fallback (HiveMQ -> EMQX -> Mosquitto), Fila Offline Resiliente & Criptografia AES-256
 import mqtt from 'mqtt';
 import { state, saveMembersToStorage, savePlacesToStorage, mergeRemoteMember, mergeRemotePlace } from './sync.js';
-import { encryptPayload, decryptPayload } from './crypto.js';
+import { encryptPayload, decryptPayload, deriveMqttTopic } from './crypto.js';
 import { enqueueMessage, flushOutbox, getPendingQueueCount } from './outbox.js';
 
 let mqttClient = null;
@@ -66,9 +66,10 @@ export async function enableScreenWakeLock() {
 }
 
 /**
- * Publica mensagem cifrada com E2E e fallback para fila offline se desconectado
+ * Publica mensagem cifrada com E2E e fallback para fila offline se desconectado.
+ * Suporta a flag retain para entrega imediata da última localização a novos membros.
  */
-async function publishEncrypted(subTopic, payloadObj, qos = 0) {
+async function publishEncrypted(subTopic, payloadObj, qos = 0, retain = false) {
   const fullTopic = `${currentCircleTopic}/${subTopic}`;
 
   // Se estiver desconectado, enfileira na outbox offline
@@ -89,7 +90,7 @@ async function publishEncrypted(subTopic, payloadObj, qos = 0) {
     const serialized = JSON.stringify(encryptedEnvelope);
 
     return new Promise((resolve) => {
-      mqttClient.publish(fullTopic, serialized, { qos }, (err) => {
+      mqttClient.publish(fullTopic, serialized, { qos, retain }, (err) => {
         if (err) {
           console.warn('[Realtime Publish Err]', err);
           enqueueMessage(fullTopic, payloadObj, qos);
@@ -109,7 +110,7 @@ async function publishEncrypted(subTopic, payloadObj, qos = 0) {
 /**
  * Inicializa a sincronização em tempo real entre todos os aparelhos do círculo
  */
-export function initRealtimeNetwork({
+export async function initRealtimeNetwork({
   onMemberJoined,
   onMemberUpdated,
   onMemberDeleted,
@@ -118,15 +119,19 @@ export function initRealtimeNetwork({
   onGeofenceAlertReceived,
   onSOSReceived,
   onRingReceived,
+  onCheckinReceived,
+  onChatMessageReceived,
   onStatusChanged,
 }) {
   activeStatusCallback = onStatusChanged;
-  const circleIdSafe = (state.circleId || 'FAMILIA-01').replace(/[^a-zA-Z0-9_-]/g, '');
-  currentCircleTopic = `geopulse/v2/${circleIdSafe}`;
+  
+  // Deriva tópico com hash SHA-256 unidirecional (Zero-Knowledge: broker não vê Circle ID)
+  currentCircleTopic = await deriveMqttTopic(state.circleId);
+  console.log('[Realtime] Tópico isolado Zero-Knowledge:', currentCircleTopic);
 
   const clientId = `gp_${state.currentUser.id}_${Math.random().toString(36).slice(2, 7)}`;
 
-  const connectToCurrentBroker = () => {
+  const connectToCurrentBroker = async () => {
     const brokerUrl = BROKERS[currentBrokerIndex];
     console.log(`[Realtime] Conectando ao broker ${brokerUrl} (${currentBrokerIndex + 1}/${BROKERS.length})...`);
 
@@ -145,13 +150,39 @@ export function initRealtimeNetwork({
         } catch (e) {}
       }
 
+      // Prepara payload de LWT (Last Will and Testament) cifrado para detecção imediata de offline
+      let willOption = undefined;
+      try {
+        const offlineEnvelope = await encryptPayload({
+          type: 'PRESENCE',
+          user: {
+            id: state.currentUser.id,
+            name: state.currentUser.name,
+            isOnline: false,
+            updatedAt: Date.now(),
+          },
+          ts: Date.now(),
+        });
+        willOption = {
+          topic: `${currentCircleTopic}/members/${state.currentUser.id}/presence`,
+          payload: JSON.stringify(offlineEnvelope),
+          qos: 1,
+          retain: true,
+        };
+      } catch (willErr) {
+        console.warn('[Realtime] Não foi possível cifrar LWT:', willErr);
+      }
+
       const client = mqtt.connect(brokerUrl, {
         clientId,
         clean: true,
         connectTimeout: 7000,
         reconnectPeriod: 3000,
         keepalive: 25,
+        ...(willOption ? { will: willOption } : {}),
       });
+
+      mqttClient = client;
 
       client.on('connect', () => {
         isConnected = true;
@@ -170,6 +201,10 @@ export function initRealtimeNetwork({
         client.subscribe(`${currentCircleTopic}/#`, { qos: 0 }, (err) => {
           if (!err) {
             console.log(`[Realtime] Inscrito no tópico do círculo: ${currentCircleTopic}/#`);
+
+            // Atualiza presença online retida e localização no broker para entrega instantânea
+            broadcastPresence();
+            broadcastLocation(state.currentUser);
 
             // Anuncia a entrada do aparelho no círculo
             broadcastJoin();
@@ -284,6 +319,14 @@ export function initRealtimeNetwork({
           } else if (payload.type === 'RING_DEVICE') {
             console.log('[Realtime] Alerta sonoro recebido:', payload);
             if (onRingReceived) onRingReceived(payload);
+
+          } else if (payload.type === 'CHECKIN') {
+            console.log('[Realtime] Check-in recebido:', remoteUser?.name, payload.message);
+            if (onCheckinReceived) onCheckinReceived(payload);
+
+          } else if (payload.type === 'CHAT_MESSAGE') {
+            console.log('[Realtime] Mensagem de Chat Privado E2E recebida:', payload.senderName, payload.text);
+            if (onChatMessageReceived) onChatMessageReceived(payload);
           }
         } catch (err) {
           console.warn('[Realtime] Falha ao processar mensagem MQTT:', err);
@@ -321,7 +364,7 @@ export function initRealtimeNetwork({
     }
   };
 
-  mqttClient = connectToCurrentBroker();
+  await connectToCurrentBroker();
   enableScreenWakeLock();
 
   return {
@@ -364,12 +407,17 @@ export function broadcastJoin() {
 export function broadcastPresence() {
   const payload = {
     type: 'PRESENCE',
-    user: getCleanCurrentUser(),
+    user: {
+      ...getCleanCurrentUser(),
+      isOnline: true,
+    },
     places: state.geofences,
     ts: Date.now(),
   };
 
-  publishEncrypted('events', payload, 0);
+  // Atualiza presença retida deste membro para que qualquer novo celular veja na hora
+  publishEncrypted(`members/${state.currentUser.id}/presence`, payload, 0, true);
+  publishEncrypted('events', payload, 0, false);
 }
 
 /**
@@ -413,12 +461,16 @@ export function broadcastLocation(user = null) {
     type: 'LOCATION',
     user: {
       ...dataToSend,
+      isOnline: true,
       updatedAt: Date.now(),
     },
     ts: Date.now(),
   };
 
-  publishEncrypted('events', payload, 0);
+  // 1. Mensagem retida por membro para entrega instantânea a novos celulares ao abrir o app
+  publishEncrypted(`members/${state.currentUser.id}/location`, payload, 0, true);
+  // 2. Notificação no stream geral de eventos
+  publishEncrypted('events', payload, 0, false);
 }
 
 /**
@@ -479,4 +531,40 @@ export function broadcastGeofenceAlert(eventData) {
 
   publishEncrypted('events', payload, 1);
   console.log('[Realtime] Alerta de lugar transmitido para o círculo:', eventData.memberName, eventData.type, eventData.fenceName);
+}
+
+/**
+  * Transmite sinal de Check-in ("Cheguei Bem 💚") para o círculo
+  */
+export function broadcastCheckin(message = 'Cheguei bem! 💚') {
+  const payload = {
+    type: 'CHECKIN',
+    user: getCleanCurrentUser(),
+    message,
+    senderId: state.currentUser.id,
+    ts: Date.now(),
+  };
+
+  publishEncrypted('events', payload, 1, false);
+}
+
+/**
+ * Transmite mensagem de Chat Privado E2E cifrada com AES-256
+ */
+export function broadcastChatMessage(chatMsg) {
+  const payload = {
+    type: 'CHAT_MESSAGE',
+    id: chatMsg.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    senderId: state.currentUser.id,
+    senderName: state.currentUser.name,
+    senderAvatar: state.currentUser.avatar || state.currentUser.name.slice(0, 2).toUpperCase(),
+    senderPhoto: state.currentUser.photo || '',
+    senderColor: state.currentUser.color || '#007AFF',
+    targetMemberId: chatMsg.targetMemberId || null,
+    text: chatMsg.text,
+    ts: chatMsg.ts || Date.now(),
+  };
+
+  publishEncrypted('chat', payload, 1, false);
+  return payload;
 }

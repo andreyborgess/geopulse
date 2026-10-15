@@ -572,19 +572,39 @@ export function initModals() {
   document.getElementById('btn-submit-join-circle')?.addEventListener('click', () => {
     playTactileClick();
     const input = document.getElementById('input-join-circle-code');
-    let newCode = input ? input.value.trim().toUpperCase() : '';
-    if (!newCode) {
-      showToast('Digite o código do círculo para conectar.', 'error');
+    let raw = input ? input.value.trim() : '';
+    if (!raw) {
+      showToast('Digite o código ou cole o link do círculo.', 'error');
       return;
     }
 
-    // Normaliza código (se digitou apenas "1234" ou "ABCD", prefixa com FAMILIA-)
-    if (!newCode.startsWith('FAMILIA-') && newCode.length <= 6) {
-      newCode = `FAMILIA-${newCode}`;
+    let newCode = raw;
+    let urlKey = '';
+
+    // Suporte inteligente: se o usuário colou o link completo do convite
+    if (raw.includes('circle=')) {
+      try {
+        const parsedUrl = new URL(raw.startsWith('http') ? raw : `https://${raw}`);
+        const cParam = parsedUrl.searchParams.get('circle');
+        if (cParam) newCode = cParam;
+        if (parsedUrl.hash) {
+          const hashParams = new URLSearchParams(parsedUrl.hash.slice(1));
+          urlKey = hashParams.get('key') || '';
+        }
+      } catch (e) {
+        const match = raw.match(/[?&]circle=([^&#\s]+)/);
+        if (match) newCode = decodeURIComponent(match[1]);
+      }
+    } else if (!newCode.startsWith('gp_sec_') && !newCode.startsWith('FAMILIA-') && newCode.length <= 6) {
+      // Compatibilidade legada com códigos curtos manuais
+      newCode = `FAMILIA-${newCode.toUpperCase()}`;
     }
 
     state.circleId = newCode;
     localStorage.setItem('geopulse_circle_id', newCode);
+    if (urlKey) {
+      localStorage.setItem('geopulse_e2e_key', urlKey);
+    }
 
     // Limpa membros do círculo anterior para não misturar dados
     state.members.clear();
@@ -593,10 +613,12 @@ export function initModals() {
       sessionStorage.setItem('geopulse_is_new_join', 'true');
     } catch (e) {}
 
-    showToast(`Conectando ao círculo ${newCode}...`, 'info');
+    showToast('Conectando ao círculo...', 'info');
     closeConnectDeviceModal();
+
+    const hashPart = urlKey ? `#key=${encodeURIComponent(urlKey)}` : (window.location.hash || '');
     setTimeout(() => {
-      window.location.href = `/?circle=${encodeURIComponent(newCode)}&join=1`;
+      window.location.href = `/?circle=${encodeURIComponent(newCode)}&join=1${hashPart}`;
     }, 400);
   });
 

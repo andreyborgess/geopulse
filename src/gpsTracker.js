@@ -3,7 +3,7 @@ import { state, broadcastUserUpdate } from './sync.js';
 import { broadcastLocation } from './realtime.js';
 import { reverseGeocode, calculateDistance } from './geo.js';
 import { startBackgroundHeartbeat, startKeepAlive } from './keepalive.js';
-import { updateUserAccuracyCircle, isAutoFollowUser, getMapInstance } from './mapRenderer.js';
+import { updateUserAccuracyCircle, isAutoFollowUser, getMapInstance, updateUserHeadingCone } from './mapRenderer.js';
 import { eventBus } from './eventBus.js';
 
 let gpsWatchId = null;
@@ -183,9 +183,8 @@ export function setupCompassListener() {
       if (needleSvg) {
         needleSvg.style.transform = `rotate(${-heading}deg)`;
       }
-      if (!state.currentUser.speed || state.currentUser.speed < 3) {
-        state.currentUser.heading = Math.round(heading);
-      }
+      state.currentUser.heading = Math.round(heading);
+      updateUserHeadingCone(Math.round(heading));
     }
   };
 

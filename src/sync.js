@@ -1,5 +1,6 @@
 // Sincronização em Tempo Real (Cross-Tab via BroadcastChannel + Gerenciamento de Membros com LWW)
 import { calculateBearing } from './geo.js';
+import { generateSecureCircleId } from './crypto.js';
 
 const CHANNEL_NAME = 'geopulse_live_channel';
 let channel = null;
@@ -77,16 +78,29 @@ export const DEFAULT_DEMO_MEMBERS = [
   },
 ];
 
-// Gera circle ID aleatório seguro se não existir
-function generateCircleId() {
-  const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-  return `FAMILIA-${rand}`;
+// Gera circle ID aleatório seguro e criptográfico
+export function generateCircleId() {
+  return generateSecureCircleId();
 }
 
-let savedCircleId = localStorage.getItem('geopulse_circle_id');
-if (!savedCircleId) {
-  savedCircleId = generateCircleId();
-  localStorage.setItem('geopulse_circle_id', savedCircleId);
+// Resolve o circleId correto considerando URL de convite (prioridade máxima)
+function resolveCircleId() {
+  // 1. Prioridade: parâmetro ?circle= da URL (link de convite / QR Code)
+  if (typeof window !== 'undefined' && window.location.search) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const circleParam = urlParams.get('circle');
+    if (circleParam) {
+      localStorage.setItem('geopulse_circle_id', circleParam);
+      return circleParam;
+    }
+  }
+  // 2. Fallback: valor salvo no localStorage
+  const saved = localStorage.getItem('geopulse_circle_id');
+  if (saved && saved !== 'FAMILIA-01') return saved;
+  // 3. Último recurso: gera novo ID criptograficamente forte
+  const newId = generateSecureCircleId();
+  localStorage.setItem('geopulse_circle_id', newId);
+  return newId;
 }
 
 let initialCircleName = localStorage.getItem('geopulse_circle_name');
@@ -95,9 +109,9 @@ if (!initialCircleName || initialCircleName === 'Família Silva' || initialCircl
   localStorage.setItem('geopulse_circle_name', initialCircleName);
 }
 
-// Estado dos membros do círculo
+// Estado dos membros do círculo — circleId resolvido uma única vez, com prioridade para URL de convite
 export const state = {
-  circleId: savedCircleId,
+  circleId: resolveCircleId(),
   circleName: initialCircleName,
   currentUser: {
     id: localStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).slice(2, 8)}`,
@@ -234,11 +248,12 @@ export function initAppState() {
     state.currentUser.id = savedUserId;
   }
 
-  // Lê círculo da URL se fornecido (convite)
+  // Lê círculo da URL se fornecido (convite) — circleId já foi resolvido por resolveCircleId()
+  // mas garantimos consistência aqui também
   if (typeof window !== 'undefined' && window.location.search) {
     const urlParams = new URLSearchParams(window.location.search);
     const circleParam = urlParams.get('circle');
-    if (circleParam) {
+    if (circleParam && circleParam !== state.circleId) {
       state.circleId = circleParam;
       localStorage.setItem('geopulse_circle_id', circleParam);
     }
@@ -412,9 +427,50 @@ export function broadcastRingLocal(targetId, senderName) {
 }
 
 /**
+ * Dispara sinal de Check-in ("Cheguei Bem 💚") localmente entre abas
+ */
+export function broadcastCheckinLocal(message = 'Cheguei bem! 💚') {
+  const payload = {
+    type: 'CHECKIN',
+    circleId: state.circleId,
+    user: state.currentUser,
+    message,
+    ts: Date.now(),
+  };
+
+  if (channel) {
+    channel.postMessage(payload);
+  }
+
+  try {
+    localStorage.setItem('geopulse_last_broadcast', JSON.stringify({ ...payload, ts: Date.now() }));
+  } catch (e) {}
+}
+
+/**
+ * Dispara mensagem de Chat Privado localmente entre abas do mesmo navegador
+ */
+export function broadcastChatLocal(chatMsg) {
+  const payload = {
+    type: 'CHAT_MESSAGE',
+    circleId: state.circleId,
+    message: chatMsg,
+    ts: Date.now(),
+  };
+
+  if (channel) {
+    channel.postMessage(payload);
+  }
+
+  try {
+    localStorage.setItem('geopulse_last_broadcast', JSON.stringify({ ...payload, ts: Date.now() }));
+  } catch (e) {}
+}
+
+/**
  * Escuta atualizações de outras abas ou dispositivos que entrarem no círculo
  */
-export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMemberJoin, onMemberDeleted, onPlaceUpdated) {
+export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMemberJoin, onMemberDeleted, onPlaceUpdated, onCheckinAlert, onChatAlert) {
   const handlePayload = (payload) => {
     if (!payload || payload.circleId !== state.circleId) return;
 
@@ -436,6 +492,14 @@ export function listenToBroadcasts(onMemberUpdate, onSosAlert, onRingAlert, onMe
       if (onSosAlert) onSosAlert(payload.user);
     } else if (payload.type === 'RING_DEVICE' && payload.targetId) {
       if (onRingAlert) onRingAlert(payload);
+    } else if (payload.type === 'CHECKIN' && payload.user) {
+      if (payload.user.id !== state.currentUser.id && onCheckinAlert) {
+        onCheckinAlert(payload);
+      }
+    } else if (payload.type === 'CHAT_MESSAGE' && payload.message) {
+      if (payload.message.senderId !== state.currentUser.id && onChatAlert) {
+        onChatAlert(payload.message);
+      }
     } else if (payload.type === 'JOIN' && payload.user) {
       if (payload.user.id !== state.currentUser.id && onMemberJoin) {
         onMemberJoin(payload.user, !!payload.isNewInvite);

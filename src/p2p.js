@@ -31,7 +31,7 @@ export async function enableScreenWakeLock() {
  */
 export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated }) {
   const handlers = { onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated };
-  const circleKey = state.circleId.replace(/[^a-zA-Z0-9]/g, '') || 'FAMILIA01';
+  const circleKey = (state.circleId.replace(/[^a-zA-Z0-9]/g, '') || 'FAMILIA01').slice(0, 16);
   const myShortId = state.currentUser.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6);
 
   let sessionToken = '';

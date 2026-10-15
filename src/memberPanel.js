@@ -63,7 +63,8 @@ export function renderMembersList() {
             )
           );
 
-      const isOnline = isMe || (member.isOnline !== false && Date.now() - (member.updatedAt || 0) < 1000 * 60 * 30);
+      const elapsedMs = Date.now() - (member.updatedAt || 0);
+      const isOnline = isMe || (member.isOnline !== false && elapsedMs < 1000 * 60 * 5);
       const dotClass = isOnline ? 'online' : 'offline';
       const displayName = isMe ? `${member.name} (Você)` : member.name;
       const relationText = isMe
@@ -71,11 +72,19 @@ export function renderMembersList() {
           ? 'Organizador do Círculo'
           : 'Seu Aparelho'
         : member.relation || 'Membro do Círculo';
-      const activityText = isMe
-        ? member.activity || relationText
-        : isOnline
-        ? member.activity || relationText
-        : 'Inativo · Não visto recentemente';
+
+      let activityText = member.activity || relationText;
+      if (isMe) {
+        activityText = member.activity || relationText;
+      } else if (!isOnline) {
+        const mins = Math.floor(elapsedMs / (1000 * 60));
+        if (mins < 1) activityText = 'Offline · Desconectado';
+        else if (mins < 60) activityText = `Offline · Visto há ${mins}m`;
+        else {
+          const hours = Math.floor(mins / 60);
+          activityText = `Offline · Visto há ${hours}h`;
+        }
+      }
 
       return `
         <div class="member-card ${state.selectedMemberId === member.id ? 'active-selected' : ''}" data-id="${member.id}">
@@ -353,6 +362,26 @@ export function openMemberDetailSheet(member) {
           Notification.requestPermission();
         }
       }
+    };
+  }
+
+  // Câmera com Realidade Aumentada (AR Precision Finding)
+  const btnAR = document.getElementById('btn-action-ar');
+  if (btnAR) {
+    btnAR.onclick = () => {
+      playTactileClick();
+      closeMemberDetailSheet();
+      eventBus.emit('member:ar-finder', member);
+    };
+  }
+
+  // Chat Privado E2E
+  const btnChat = document.getElementById('btn-action-chat');
+  if (btnChat) {
+    btnChat.onclick = () => {
+      playTactileClick();
+      closeMemberDetailSheet();
+      eventBus.emit('member:chat', member);
     };
   }
 

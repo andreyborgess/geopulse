@@ -139,6 +139,71 @@ function generateMarkerVisualKey(member) {
   return `${member.id}_${member.name}_${member.color}_${member.photo}_${isMe}_${isSOS}_${speed > 3 ? 'moving' : 'idle'}_${speed > 18 ? 'fast' : 'slow'}_${heading}`;
 }
 
+/**
+ * Interpolação de Movimento Suave (Smooth Marker Sliding)
+ * Move o marcador com animação fluida (ease-out cubic) em vez de saltar repentinamente
+ */
+function slideMarkerTo(marker, targetLat, targetLng) {
+  const currentPos = marker.getLatLng();
+  const startLat = currentPos.lat;
+  const startLng = currentPos.lng;
+
+  // Se já estiver na mesma coordenada, não faz nada
+  if (Math.abs(startLat - targetLat) < 0.000001 && Math.abs(startLng - targetLng) < 0.000001) {
+    return;
+  }
+
+  const distMeters = calculateDistance(startLat, startLng, targetLat, targetLng);
+
+  // Se a distância for muito grande (> 2km, ex: primeiro carregamento ou teletransporte), pula animação
+  if (distMeters > 2000) {
+    marker.setLatLng([targetLat, targetLng]);
+    return;
+  }
+
+  // Cancela animação anterior deste marcador se estiver em curso
+  if (marker._slideAnimId) {
+    cancelAnimationFrame(marker._slideAnimId);
+  }
+
+  const startTime = performance.now();
+  // Duração dinâmica baseada no deslocamento (entre 600ms e 1200ms)
+  const animDuration = Math.min(1200, Math.max(600, distMeters * 35));
+
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / animDuration);
+    // Easing Out-Cubic (suavização natural Apple Maps)
+    const ease = 1 - Math.pow(1 - progress, 3);
+
+    const lat = startLat + (targetLat - startLat) * ease;
+    const lng = startLng + (targetLng - startLng) * ease;
+    marker.setLatLng([lat, lng]);
+
+    if (progress < 1) {
+      marker._slideAnimId = requestAnimationFrame(step);
+    } else {
+      marker._slideAnimId = null;
+    }
+  }
+
+  marker._slideAnimId = requestAnimationFrame(step);
+}
+
+/**
+ * Atualiza dinamicamente o ângulo do facho da bússola do usuário sem recriar o DOM
+ */
+export function updateUserHeadingCone(heading) {
+  const marker = markersMap.get(state.currentUser.id);
+  if (!marker) return;
+  const el = marker.getElement();
+  if (!el) return;
+  const cone = el.querySelector('.marker-heading-cone');
+  if (cone) {
+    cone.style.transform = `rotate(${heading}deg)`;
+  }
+}
+
 export function createMemberMarkerIcon(member) {
   const isMe = member.isMe;
   const color = member.color || (isMe ? '#007AFF' : '#EC4899');
@@ -148,19 +213,21 @@ export function createMemberMarkerIcon(member) {
   const isMoving = speed > 3;
   const isSOS = !!member.sos;
 
-  const heading = typeof member.heading === 'number' && !isNaN(member.heading) ? Math.round(member.heading) : null;
-  const showBeam = heading !== null && isMoving;
+  const heading = typeof member.heading === 'number' && !isNaN(member.heading) ? Math.round(member.heading) : 0;
+  // Exibe o facho de bússola SEMPRE para o próprio usuário e para outros quando em deslocamento
+  const showBeam = isMe || (isMoving && heading !== null);
   const coneHtml = showBeam
     ? `
     <div class="marker-heading-cone" style="transform: rotate(${heading}deg);">
       <svg viewBox="0 0 100 100" class="vision-beam-svg">
         <defs>
           <radialGradient id="beamGrad-${member.id || 'me'}" cx="50%" cy="50%" r="50%">
-            <stop offset="20%" stop-color="#007AFF" stop-opacity="0.5"/>
-            <stop offset="90%" stop-color="#007AFF" stop-opacity="0"/>
+            <stop offset="10%" stop-color="#007AFF" stop-opacity="0.65"/>
+            <stop offset="60%" stop-color="#007AFF" stop-opacity="0.22"/>
+            <stop offset="95%" stop-color="#007AFF" stop-opacity="0"/>
           </radialGradient>
         </defs>
-        <path d="M 50 50 L 24 8 A 46 46 0 0 1 76 8 Z" fill="url(#beamGrad-${member.id || 'me'})" />
+        <path d="M 50 50 L 12 -4 A 58 58 0 0 1 88 -4 Z" fill="url(#beamGrad-${member.id || 'me'})" />
       </svg>
     </div>
   `
@@ -236,8 +303,8 @@ function createPlaceMarkerIcon(place) {
 }
 
 /**
- * Atualiza o marcador com Marker Diffing:
- * Se o HTML do marcador não mudou, apenas atualiza as coordenadas com setLatLng() suave
+ * Atualiza o marcador com Smooth Marker Sliding & Diffing:
+ * Anima o marcador suavemente deslizando pelas ruas e só recria o DOM se o visual mudar
  */
 export function updateMarkerForMember(member) {
   if (!map || !member || !member.lat || !member.lng) return;
@@ -257,7 +324,8 @@ export function updateMarkerForMember(member) {
 
   if (markersMap.has(member.id)) {
     const existingMarker = markersMap.get(member.id);
-    existingMarker.setLatLng([member.lat, member.lng]);
+    // Desliza suavemente até as novas coordenadas
+    slideMarkerTo(existingMarker, member.lat, member.lng);
 
     // Só refaz o DOM do ícone se a representação visual mudou
     if (cachedVisualKey !== currentVisualKey) {

@@ -72,18 +72,62 @@ async function importKeyFromString(rawKeyBase64Url) {
 }
 
 /**
+ * Gera um Circle ID criptograficamente forte (UUID/nanoid de alta entropia)
+ * Impossível de ser adivinhado ou atacado por força bruta (~1 sextilhão de combinações).
+ */
+export function generateSecureCircleId() {
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    let binary = '';
+    for (let i = 0; i < bytes.byteLength; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const safeStr = btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    return `gp_sec_${safeStr}`;
+  }
+  return `gp_sec_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+}
+
+/**
+ * Deriva o identificador do tópico MQTT usando SHA-256 unidirecional (Zero-Knowledge).
+ * O broker público vê apenas um hash opaco (ex: geopulse/v3/4a8f9c10...) e
+ * é matematicamente impossível reverter o hash para obter o Circle ID original ou a chave AES.
+ */
+export async function deriveMqttTopic(circleId) {
+  if (!circleId) return 'geopulse/v3/default';
+  const clean = circleId.trim();
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    const encoder = new TextEncoder();
+    const data = encoder.encode('geopulse-mqtt-topic-v3-salt:' + clean);
+    const hashBuf = await window.crypto.subtle.digest('SHA-256', data);
+    const bytes = new Uint8Array(hashBuf);
+    let hex = '';
+    for (let i = 0; i < 16; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return `geopulse/v3/${hex}`;
+  }
+  return `geopulse/v3/${clean.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+}
+
+/**
  * Deriva uma chave simétrica AES-GCM de 256 bits determinística a partir do código do círculo.
- * Isso garante que todos os celulares do mesmo círculo compartilhem a mesma chave de decifragem,
- * mesmo que o fragmento #key=... seja cortado por aplicativos como WhatsApp ou na digitação manual.
+ * Utiliza um salt isolado para garantir que a chave AES seja independente do tópico MQTT.
+ * Mantém suporte a círculos legados (FAMILIA-XXXX) para retrocompatibilidade.
  */
 export async function deriveKeyFromCircle(circleId) {
   if (!circleId || typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
     return null;
   }
-  const cleanCircle = circleId.trim().toUpperCase();
-  const salt = 'GeoPulse-Familiar-E2E-2026-v2-';
+  const cleanCircle = circleId.trim();
+  const isLegacy = cleanCircle.toUpperCase().startsWith('FAMILIA-');
+  const salt = isLegacy ? 'GeoPulse-Familiar-E2E-2026-v2-' : 'GeoPulse-E2E-AES256-v3-isolated-';
   const encoder = new TextEncoder();
-  const data = encoder.encode(salt + cleanCircle);
+  const data = encoder.encode(salt + (isLegacy ? cleanCircle.toUpperCase() : cleanCircle));
   const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
   const rawKey = bufferToBase64Url(hashBuffer);
 
@@ -101,6 +145,9 @@ export async function deriveKeyFromCircle(circleId) {
  * Inicializa o subsistema de criptografia E2E:
  * 1. Verifica se veio #key=... na URL (convite ou QR Code)
  * 2. Deriva deterministicamente do circleId garantindo decifragem 100% perfeita entre aparelhos
+ *
+ * IMPORTANTE: O circleId é resolvido com a mesma prioridade que sync.js:
+ *   URL ?circle= > localStorage > fallback gerado com alta entropia
  */
 export async function initCircleCrypto(explicitCircleId = null) {
   if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
@@ -110,7 +157,7 @@ export async function initCircleCrypto(explicitCircleId = null) {
 
   let keyStr = '';
 
-  // 1. Tenta extrair da URL (#key=...)
+  // 1. Tenta extrair chave explícita da URL (#key=...)
   if (window.location.hash) {
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
     const urlKey = hashParams.get('key');
@@ -120,21 +167,30 @@ export async function initCircleCrypto(explicitCircleId = null) {
     }
   }
 
-  const circleId = explicitCircleId || localStorage.getItem('geopulse_circle_id') || 'FAMILIA-01';
-
-  // 2. Se veio chave explícita na URL, tenta importá-la
-  if (keyStr) {
-    activeCryptoKey = await importKeyFromString(keyStr);
+  // 2. Resolve circleId com a mesma prioridade que sync.js: URL > localStorage > fallback
+  let circleId = explicitCircleId;
+  if (!circleId && typeof window !== 'undefined' && window.location.search) {
+    const urlParams = new URLSearchParams(window.location.search);
+    circleId = urlParams.get('circle') || null;
+  }
+  if (!circleId) {
+    circleId = localStorage.getItem('geopulse_circle_id');
+    if (!circleId) {
+      circleId = generateSecureCircleId();
+      localStorage.setItem('geopulse_circle_id', circleId);
+    }
   }
 
-  // 3. Se não veio ou falhou, deriva diretamente do Circle ID
-  if (!activeCryptoKey) {
-    const derived = await deriveKeyFromCircle(circleId);
-    if (derived) {
-      activeCryptoKey = derived.key;
-      keyStr = derived.keyStr;
-      localStorage.setItem(KEY_STORAGE_NAME, keyStr);
-    }
+  console.log('[Crypto] Derivando chave E2E para circleId:', circleId);
+
+  // 3. SEMPRE deriva a chave do circleId para consistência determinística
+  const derived = await deriveKeyFromCircle(circleId);
+  if (derived) {
+    activeCryptoKey = derived.key;
+    keyStr = derived.keyStr;
+    localStorage.setItem(KEY_STORAGE_NAME, keyStr);
+  } else if (keyStr) {
+    activeCryptoKey = await importKeyFromString(keyStr);
   }
 
   exportedKeyString = keyStr;
