@@ -1,6 +1,11 @@
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+  base: './',
+  server: {
+    host: true,
+    allowedHosts: true,
+  },
   build: {
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
