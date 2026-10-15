@@ -133,12 +133,7 @@ export function renderMembersList() {
       }
       const member = state.members.get(id);
       if (member) {
-        const isOrganizerMatch =
-          (member.relation === 'Organizador' || member.role === 'Administrador') &&
-          (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador');
-        const isNameMatch = state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name;
-
-        if (member.isMe || isOrganizerMatch || isNameMatch) {
+        if (member.isMe || member.id === state.currentUser.id) {
           eventBus.emit('modal:open-profile');
           return;
         }
@@ -233,14 +228,7 @@ export function openMemberDetailSheet(member) {
   if (!member) return;
 
   // Se for o próprio usuário, abre o modal de edição de perfil
-  const isMe =
-    member.isMe ||
-    member.id === state.currentUser.id ||
-    (state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name) ||
-    ((member.relation === 'Organizador' || member.role === 'Administrador') &&
-      (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
-
-  if (isMe) {
+  if (member.isMe || member.id === state.currentUser.id) {
     closeMemberDetailSheet();
     eventBus.emit('modal:open-profile');
     return;

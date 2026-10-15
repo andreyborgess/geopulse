@@ -572,16 +572,32 @@ export function initModals() {
   document.getElementById('btn-submit-join-circle')?.addEventListener('click', () => {
     playTactileClick();
     const input = document.getElementById('input-join-circle-code');
-    const newCode = input ? input.value.trim().toUpperCase() : '';
+    let newCode = input ? input.value.trim().toUpperCase() : '';
     if (!newCode) {
       showToast('Digite o código do círculo para conectar.', 'error');
       return;
     }
+
+    // Normaliza código (se digitou apenas "1234" ou "ABCD", prefixa com FAMILIA-)
+    if (!newCode.startsWith('FAMILIA-') && newCode.length <= 6) {
+      newCode = `FAMILIA-${newCode}`;
+    }
+
     state.circleId = newCode;
     localStorage.setItem('geopulse_circle_id', newCode);
-    showToast(`Conectado ao círculo ${newCode}!`, 'info');
+
+    // Limpa membros do círculo anterior para não misturar dados
+    state.members.clear();
+    localStorage.removeItem('geopulse_members_data');
+    try {
+      sessionStorage.setItem('geopulse_is_new_join', 'true');
+    } catch (e) {}
+
+    showToast(`Conectando ao círculo ${newCode}...`, 'info');
     closeConnectDeviceModal();
-    window.location.reload();
+    setTimeout(() => {
+      window.location.href = `/?circle=${encodeURIComponent(newCode)}&join=1`;
+    }, 400);
   });
 
   // PWA Install Triggers

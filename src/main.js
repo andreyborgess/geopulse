@@ -176,34 +176,32 @@ function handleIncomingRing(payload) {
 }
 
 function handleMemberJoined(remoteUser, isNewInvite = false) {
-  if (!remoteUser || remoteUser.id === state.currentUser.id) return;
-  if (state.currentUser.name && state.currentUser.name !== 'Você' && remoteUser.name === state.currentUser.name) return;
-  if ((remoteUser.relation === 'Organizador' || remoteUser.role === 'Administrador') && (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador')) return;
+  if (!remoteUser || !remoteUser.id || remoteUser.id === state.currentUser.id) return;
 
   updateMarkerForMember(remoteUser);
   renderMembersList();
   checkActivePlaces();
 
-  if (!isNewInvite) return;
-
   let knownNotified = new Set();
   try {
-    const list = JSON.parse(localStorage.getItem('geopulse_notified_members') || '[]');
+    const list = JSON.parse(sessionStorage.getItem('geopulse_notified_members') || '[]');
     if (Array.isArray(list)) knownNotified = new Set(list);
   } catch (e) {}
 
-  if (knownNotified.has(remoteUser.id)) return;
-  knownNotified.add(remoteUser.id);
-  try {
-    localStorage.setItem('geopulse_notified_members', JSON.stringify(Array.from(knownNotified)));
-  } catch (e) {}
+  if (!knownNotified.has(remoteUser.id)) {
+    knownNotified.add(remoteUser.id);
+    try {
+      sessionStorage.setItem('geopulse_notified_members', JSON.stringify(Array.from(knownNotified)));
+    } catch (e) {}
 
-  playRadarPing();
-  if ('vibrate' in navigator) {
-    navigator.vibrate([200, 100, 200]);
+    playRadarPing();
+    if ('vibrate' in navigator) {
+      navigator.vibrate([200, 100, 200]);
+    }
+    const memberName = remoteUser.name || 'Novo aparelho';
+    notifyMemberJoined(memberName);
+    showToast(`🎉 ${memberName} conectou-se à Família!`, 'info');
   }
-  notifyMemberJoined(remoteUser.name);
-  showToast(`🎉 ${remoteUser.name} aceitou o convite e entrou na Família!`, 'info');
 }
 
 /* =========================================================

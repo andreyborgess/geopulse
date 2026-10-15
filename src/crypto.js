@@ -72,12 +72,37 @@ async function importKeyFromString(rawKeyBase64Url) {
 }
 
 /**
+ * Deriva uma chave simétrica AES-GCM de 256 bits determinística a partir do código do círculo.
+ * Isso garante que todos os celulares do mesmo círculo compartilhem a mesma chave de decifragem,
+ * mesmo que o fragmento #key=... seja cortado por aplicativos como WhatsApp ou na digitação manual.
+ */
+export async function deriveKeyFromCircle(circleId) {
+  if (!circleId || typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
+    return null;
+  }
+  const cleanCircle = circleId.trim().toUpperCase();
+  const salt = 'GeoPulse-Familiar-E2E-2026-v2-';
+  const encoder = new TextEncoder();
+  const data = encoder.encode(salt + cleanCircle);
+  const hashBuffer = await window.crypto.subtle.digest('SHA-256', data);
+  const rawKey = bufferToBase64Url(hashBuffer);
+
+  const key = await window.crypto.subtle.importKey(
+    'raw',
+    hashBuffer,
+    { name: 'AES-GCM', length: 256 },
+    true,
+    ['encrypt', 'decrypt']
+  );
+  return { key, keyStr: rawKey };
+}
+
+/**
  * Inicializa o subsistema de criptografia E2E:
  * 1. Verifica se veio #key=... na URL (convite ou QR Code)
- * 2. Verifica se há chave salva no LocalStorage
- * 3. Se não houver, gera uma chave criptográfica forte e a persiste
+ * 2. Deriva deterministicamente do circleId garantindo decifragem 100% perfeita entre aparelhos
  */
-export async function initCircleCrypto() {
+export async function initCircleCrypto(explicitCircleId = null) {
   if (typeof window === 'undefined' || !window.crypto || !window.crypto.subtle) {
     console.warn('[Crypto] Web Crypto API não disponível neste ambiente.');
     return null;
@@ -95,26 +120,21 @@ export async function initCircleCrypto() {
     }
   }
 
-  // 2. Se não veio na URL, busca do LocalStorage
-  if (!keyStr) {
-    keyStr = localStorage.getItem(KEY_STORAGE_NAME) || '';
-  }
+  const circleId = explicitCircleId || localStorage.getItem('geopulse_circle_id') || 'FAMILIA-01';
 
-  // 3. Se ainda não há chave, gera uma nova
+  // 2. Se veio chave explícita na URL, tenta importá-la
   if (keyStr) {
     activeCryptoKey = await importKeyFromString(keyStr);
-    if (!activeCryptoKey) {
-      // Chave corrompida, regera
-      activeCryptoKey = await generateNewKey();
-      const raw = await window.crypto.subtle.exportKey('raw', activeCryptoKey);
-      keyStr = bufferToBase64Url(raw);
+  }
+
+  // 3. Se não veio ou falhou, deriva diretamente do Circle ID
+  if (!activeCryptoKey) {
+    const derived = await deriveKeyFromCircle(circleId);
+    if (derived) {
+      activeCryptoKey = derived.key;
+      keyStr = derived.keyStr;
       localStorage.setItem(KEY_STORAGE_NAME, keyStr);
     }
-  } else {
-    activeCryptoKey = await generateNewKey();
-    const raw = await window.crypto.subtle.exportKey('raw', activeCryptoKey);
-    keyStr = bufferToBase64Url(raw);
-    localStorage.setItem(KEY_STORAGE_NAME, keyStr);
   }
 
   exportedKeyString = keyStr;

@@ -204,17 +204,14 @@ export function initRealtimeNetwork({
 
           const remoteUser = payload.user;
 
-          // Ignora mensagens originadas do próprio aparelho ou duplicatas do organizador
-          if (remoteUser) {
-            if (remoteUser.id === state.currentUser.id) return;
-            if (state.currentUser.name && state.currentUser.name !== 'Você' && remoteUser.name === state.currentUser.name) return;
-            if ((remoteUser.relation === 'Organizador' || remoteUser.role === 'Administrador') && (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador')) return;
-          }
+          // Ignora estritamente mensagens originadas do próprio aparelho (mesmo ID de usuário)
+          if (remoteUser && remoteUser.id === state.currentUser.id) return;
           if (payload.senderId && payload.senderId === state.currentUser.id) return;
 
           const now = Date.now();
 
           if (payload.type === 'JOIN' && remoteUser) {
+            console.log('[Realtime] Novo aparelho entrou no círculo:', remoteUser.name, remoteUser.id);
             const isKnownMember = state.members.has(remoteUser.id);
             const changed = mergeRemoteMember(remoteUser);
 
@@ -231,12 +228,14 @@ export function initRealtimeNetwork({
               if (placesChanged && onPlaceUpdated) onPlaceUpdated();
             }
 
-            // Responde imediatamente com presença para o novo celular registrar
+            // Responde imediatamente com presença e localização para o novo celular registrar instantaneamente
             setTimeout(() => {
               broadcastPresence();
-            }, 300);
+              broadcastLocation(state.currentUser);
+            }, 100);
 
           } else if (payload.type === 'PRESENCE' && remoteUser) {
+            console.log('[Realtime] Presença recebida de:', remoteUser.name, remoteUser.id);
             const changed = mergeRemoteMember(remoteUser);
             if (changed && onMemberUpdated) onMemberUpdated(remoteUser);
 
@@ -306,12 +305,12 @@ export function initRealtimeNetwork({
         connectionFailures++;
         console.warn(`[Realtime Broker Error] ${brokerUrl}:`, err?.message || err);
 
-        // Se falhar 3 vezes consecutivas, migra para o próximo broker na lista de fallback
-        if (connectionFailures >= 3) {
+        // Apenas migra se houver 8 falhas graves consecutivas para evitar split-brain
+        if (connectionFailures >= 8) {
           connectionFailures = 0;
           currentBrokerIndex = (currentBrokerIndex + 1) % BROKERS.length;
-          console.log(`[Realtime] Alternando para broker redundante: ${BROKERS[currentBrokerIndex]}`);
-          setTimeout(connectToCurrentBroker, 1500);
+          console.log(`[Realtime] Alternando temporariamente para broker secundário: ${BROKERS[currentBrokerIndex]}`);
+          setTimeout(connectToCurrentBroker, 2000);
         }
       });
 

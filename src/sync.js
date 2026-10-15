@@ -174,18 +174,8 @@ export function mergeRemoteMember(remoteUser) {
     return false;
   }
 
-  // Se o membro remoto for o próprio usuário (mesmo nome ou ambos organizadores), não duplica em state.members
-  const isSameName = state.currentUser.name && state.currentUser.name !== 'Você' && remoteUser.name === state.currentUser.name;
-  const isBothOrganizers =
-    (remoteUser.relation === 'Organizador' || remoteUser.role === 'Administrador') &&
-    (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador');
-
-  if (isSameName || isBothOrganizers) {
-    // Se o usuário atual não tiver foto mas o remoto tiver, adota a foto
-    if (remoteUser.photo && !state.currentUser.photo) {
-      state.currentUser.photo = remoteUser.photo;
-      localStorage.setItem('geopulse_user_photo', remoteUser.photo);
-    }
+  // Se for uma mensagem ecoada do próprio aparelho com o mesmo ID
+  if (remoteUser.id === state.currentUser.id) {
     return false;
   }
 
@@ -326,15 +316,13 @@ export function initAppState() {
     } catch (e) {}
   }
 
-  // Remove qualquer membro que tenha o mesmo ID, nome ou cargo de Organizador do usuário atual
+  // Remove qualquer membro que tenha o mesmo ID do usuário atual
   state.members.delete(state.currentUser.id);
   Array.from(state.members.entries()).forEach(([id, m]) => {
     const isDup =
       m.isMe ||
       id === state.currentUser.id ||
-      (state.currentUser.name && state.currentUser.name !== 'Você' && m.name === state.currentUser.name) ||
-      ((m.relation === 'Organizador' || m.role === 'Administrador') &&
-        (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+      (state.currentUser.name && state.currentUser.name !== 'Você' && m.name === state.currentUser.name && m.id === state.currentUser.id);
 
     if (isDup) {
       state.members.delete(id);
@@ -371,10 +359,7 @@ export function saveMembersToStorage() {
   const membersArray = Array.from(state.members.values()).filter(
     (m) =>
       !m.isMe &&
-      m.id !== state.currentUser.id &&
-      (!state.currentUser.name || state.currentUser.name === 'Você' || m.name !== state.currentUser.name) &&
-      m.relation !== 'Organizador' &&
-      m.role !== 'Administrador'
+      m.id !== state.currentUser.id
   );
   localStorage.setItem('geopulse_members_data', JSON.stringify(membersArray));
 }

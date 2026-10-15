@@ -242,15 +242,10 @@ function createPlaceMarkerIcon(place) {
 export function updateMarkerForMember(member) {
   if (!map || !member || !member.lat || !member.lng) return;
 
-  const isMe =
-    member.isMe ||
-    member.id === state.currentUser.id ||
-    (state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name) ||
-    ((member.relation === 'Organizador' || member.role === 'Administrador') &&
-      (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+  const isMe = member.isMe || member.id === state.currentUser.id;
 
-  // Se for um registro remoto duplicado do próprio usuário, remove o marcador fantasma
-  if (!member.isMe && isMe) {
+  // Se for um registro ecoado do próprio usuário com id idêntico mas isMe falso
+  if (!member.isMe && member.id === state.currentUser.id) {
     if (markersMap.has(member.id)) {
       removeMarker(member.id);
     }
@@ -275,12 +270,7 @@ export function updateMarkerForMember(member) {
     }).addTo(map);
 
     marker.on('click', () => {
-      const isClickedMe =
-        member.isMe ||
-        member.id === state.currentUser.id ||
-        (state.currentUser.name && state.currentUser.name !== 'Você' && member.name === state.currentUser.name) ||
-        ((member.relation === 'Organizador' || member.role === 'Administrador') &&
-          (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
+      const isClickedMe = member.isMe || member.id === state.currentUser.id;
 
       if (isClickedMe) {
         eventBus.emit('modal:open-profile');
