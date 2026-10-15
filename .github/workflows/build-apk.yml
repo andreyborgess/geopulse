@@ -36,7 +36,13 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Copy Assets to Android
-        run: npx cap copy android
+        run: |
+          mkdir -p android/app/src/main/assets/public
+          cp -rf dist/* android/app/src/main/assets/public/
+          touch android/app/src/main/assets/public/cordova.js
+          touch android/app/src/main/assets/public/cordova_plugins.js
+          echo '[]' > android/app/src/main/assets/capacitor.plugins.json
+          echo '{"appId":"com.geopulse.app","appName":"GeoPulse","webDir":"public"}' > android/app/src/main/assets/capacitor.config.json
 
       - name: Build Debug APK
         run: |
