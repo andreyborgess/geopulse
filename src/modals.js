@@ -552,6 +552,12 @@ export function initModals() {
     window.location.href = url;
   });
 
+  document.getElementById('btn-quick-share-open-qr')?.addEventListener('click', () => {
+    playTactileClick();
+    closeQuickShare();
+    openConnectDeviceModal();
+  });
+
   // Copiar links e códigos
   document.getElementById('btn-copy-code')?.addEventListener('click', () => {
     playTactileClick();

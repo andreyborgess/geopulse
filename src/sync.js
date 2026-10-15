@@ -274,52 +274,37 @@ export function initAppState() {
     try {
       const parsed = JSON.parse(savedMembersJson);
       if (Array.isArray(parsed)) {
-        // Se o usuário atual estiver sem nome ("Você") ou sem foto, restaura do perfil de organizador salvo (ex: "Dev")
-        const organizerProfile = parsed.find(
-          (m) =>
-            m.isMe ||
-            m.id === state.currentUser.id ||
-            m.name === 'Dev' ||
-            ((m.relation === 'Organizador' || m.role === 'Administrador') && m.name && m.name !== 'Você')
-        );
-
-        if (organizerProfile) {
+        // Restaura perfil próprio salvo apenas se pertencer a este aparelho (mesmo ID ou isMe)
+        const mySavedProfile = parsed.find((m) => m && (m.id === state.currentUser.id || m.isMe));
+        if (mySavedProfile) {
           if (!state.currentUser.name || state.currentUser.name === 'Você') {
-            state.currentUser.name = organizerProfile.name;
-            localStorage.setItem('geopulse_user_name', organizerProfile.name);
+            state.currentUser.name = mySavedProfile.name;
+            localStorage.setItem('geopulse_user_name', mySavedProfile.name);
           }
-          if (organizerProfile.photo && !state.currentUser.photo) {
-            state.currentUser.photo = organizerProfile.photo;
-            localStorage.setItem('geopulse_user_photo', organizerProfile.photo);
+          if (mySavedProfile.photo && !state.currentUser.photo) {
+            state.currentUser.photo = mySavedProfile.photo;
+            localStorage.setItem('geopulse_user_photo', mySavedProfile.photo);
           }
-          if (organizerProfile.avatar && (!state.currentUser.avatar || state.currentUser.avatar === 'VC')) {
-            state.currentUser.avatar = organizerProfile.avatar;
-            localStorage.setItem('geopulse_user_avatar', organizerProfile.avatar);
+          if (mySavedProfile.avatar && (!state.currentUser.avatar || state.currentUser.avatar === 'VC')) {
+            state.currentUser.avatar = mySavedProfile.avatar;
+            localStorage.setItem('geopulse_user_avatar', mySavedProfile.avatar);
           }
-          if (organizerProfile.color) {
-            state.currentUser.color = organizerProfile.color;
-            localStorage.setItem('geopulse_user_color', organizerProfile.color);
+          if (mySavedProfile.color) {
+            state.currentUser.color = mySavedProfile.color;
+            localStorage.setItem('geopulse_user_color', mySavedProfile.color);
           }
-          state.currentUser.relation = 'Organizador';
-          state.currentUser.role = 'Administrador';
-          state.currentUser.isMe = true;
-          localStorage.setItem('geopulse_onboarded', 'true');
+          if (mySavedProfile.relation && state.currentUser.relation === 'Organizador') {
+            state.currentUser.relation = mySavedProfile.relation;
+          }
         }
 
-        // Filtra e carrega apenas membros reais externos
+        // Filtra e carrega apenas membros reais externos (outros celulares)
         parsed.forEach((m) => {
-          const isCurrentUser =
-            m.isMe ||
-            m.id === state.currentUser.id ||
-            (state.currentUser.name && state.currentUser.name !== 'Você' && m.name === state.currentUser.name) ||
-            ((m.relation === 'Organizador' || m.role === 'Administrador') &&
-              (state.currentUser.relation === 'Organizador' || state.currentUser.role === 'Administrador'));
-
-          if (isCurrentUser) {
+          if (!m || !m.id || m.id === state.currentUser.id || m.isMe) {
             return; // NUNCA adiciona o próprio usuário na lista de membros remotos
           }
 
-          // Preserva apenas membros reais externos
+          // Preserva apenas membros reais externos (ignora dados legados de demo)
           if (!m.isDemo && m.id !== 'member_mariana' && m.id !== 'member_lucas' && m.id !== 'member_carlos') {
             state.members.set(m.id, {
               ...m,
@@ -334,12 +319,7 @@ export function initAppState() {
   // Remove qualquer membro que tenha o mesmo ID do usuário atual
   state.members.delete(state.currentUser.id);
   Array.from(state.members.entries()).forEach(([id, m]) => {
-    const isDup =
-      m.isMe ||
-      id === state.currentUser.id ||
-      (state.currentUser.name && state.currentUser.name !== 'Você' && m.name === state.currentUser.name && m.id === state.currentUser.id);
-
-    if (isDup) {
+    if (m.isMe || id === state.currentUser.id) {
       state.members.delete(id);
     }
   });
