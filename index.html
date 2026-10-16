@@ -494,9 +494,118 @@
                 </div>
               </div>
 
+              <!-- Atalho para Rastreamento 24h iOS (Traccar Client) -->
+              <div class="traccar-promo-card">
+                <div class="traccar-promo-info">
+                  <span class="traccar-promo-icon">🛰️</span>
+                  <div>
+                    <strong>Rastreamento 24h no iPhone (iOS)</strong>
+                    <span>Envie localização com a tela apagada via Traccar Client.</span>
+                  </div>
+                </div>
+                <button type="button" class="btn-apple-action secondary btn-sm" id="btn-open-traccar-setup">
+                  <span>Configurar</span>
+                </button>
+              </div>
+
               <div class="modal-actions">
                 <button class="btn-apple-action secondary" id="btn-cancel-profile">Cancelar</button>
                 <button class="btn-apple-action primary" id="btn-save-profile">Salvar Alterações</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL CONFIGURAÇÃO TRACCAR CLIENT (RASTREAMENTO 24H IOS) -->
+      <div class="modal-backdrop" id="modal-traccar" style="display: none;">
+        <div class="modal-card-shell">
+          <div class="modal-card-core">
+            <div class="modal-header">
+              <div class="modal-header-info">
+                <span class="modal-eyebrow">RASTREAMENTO CONTÍNUO 24H</span>
+                <h3>GPS Invisível no iPhone</h3>
+              </div>
+              <button class="modal-close" id="btn-close-traccar-modal" title="Fechar">&times;</button>
+            </div>
+            <div class="modal-body">
+              <p class="traccar-explainer-text">
+                O <strong>Traccar Client</strong> é um app gratuito da App Store que roda como serviço nativo no iOS. Ele lê o GPS com o celular bloqueado no bolso e envia direto para o GeoPulse da sua família.
+              </p>
+
+              <!-- Passo 1: Baixar o App -->
+              <div class="traccar-step-box">
+                <div class="traccar-step-header">
+                  <span class="step-num-badge">1</span>
+                  <strong>Instale o Traccar Client no seu iPhone</strong>
+                </div>
+                <p>Baixe gratuitamente direto da App Store oficial:</p>
+                <a href="https://apps.apple.com/app/traccar-client/id843156976" target="_blank" rel="noopener noreferrer" class="btn-apple-appstore" id="btn-open-appstore-traccar">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                    <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M15.97 3.5c.62-.75 1.04-1.8 0.92-2.85-.9.04-1.99.6-2.63 1.35-.57.66-.99 1.72-.88 2.76 1.02.08 2.04-.51 2.59-1.26z"/>
+                  </svg>
+                  <span>Baixar na App Store (Grátis)</span>
+                </a>
+              </div>
+
+              <!-- Passo 2: Copiar URL do Servidor -->
+              <div class="traccar-step-box">
+                <div class="traccar-step-header">
+                  <span class="step-num-badge">2</span>
+                  <strong>Cole a URL no Traccar Client</strong>
+                </div>
+                <p>No Traccar Client, no campo <strong>URL do Servidor</strong>, cole este endereço:</p>
+                <div class="traccar-copy-row">
+                  <input type="text" id="input-traccar-server-url" readonly />
+                  <button type="button" class="btn-apple-copy" id="btn-copy-traccar-url" title="Copiar URL">
+                    <span>Copiar</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Passo 3: Identificador do Dispositivo -->
+              <div class="traccar-step-box">
+                <div class="traccar-step-header">
+                  <span class="step-num-badge">3</span>
+                  <strong>Identificador do Dispositivo</strong>
+                </div>
+                <p>No campo <strong>Identificador do Dispositivo</strong>, digite:</p>
+                <div class="traccar-copy-row">
+                  <input type="text" id="input-traccar-device-id" readonly />
+                  <button type="button" class="btn-apple-copy" id="btn-copy-traccar-id" title="Copiar ID">
+                    <span>Copiar</span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Passo 4: Permissão Sempre no iOS -->
+              <div class="traccar-step-box">
+                <div class="traccar-step-header">
+                  <span class="step-num-badge">4</span>
+                  <strong>Ative "Sempre Permitir" no iOS</strong>
+                </div>
+                <p>Vá em <em>Ajustes do iPhone &gt; Traccar Client &gt; Localização</em> e marque <strong>"Sempre"</strong> com <em>Localização Precisa</em> ativada.</p>
+                <p style="margin-top: 6px; font-size: 11.5px; color: var(--status-green);">
+                  ✓ Ligue a chave <strong>Status de Serviço</strong> dentro do Traccar Client. Pronto!
+                </p>
+              </div>
+
+              <!-- Status do Sinal Recebido -->
+              <div class="traccar-status-card" id="traccar-signal-status-card">
+                <div class="traccar-status-dot-wrap">
+                  <span class="network-dot" id="traccar-status-dot" style="background: #FF9500;"></span>
+                </div>
+                <div class="traccar-status-info">
+                  <strong id="traccar-status-title">Aguardando sinal do Traccar...</strong>
+                  <span id="traccar-status-meta">Toque no botão abaixo para testar a comunicação</span>
+                </div>
+                <button type="button" class="btn-apple-action secondary btn-sm" id="btn-test-traccar-signal">
+                  <span>Testar Sinal</span>
+                </button>
+              </div>
+
+              <div class="modal-actions" style="margin-top: 18px;">
+                <button class="btn-apple-action primary" id="btn-done-traccar" style="width: 100%;">Concluir</button>
               </div>
             </div>
           </div>

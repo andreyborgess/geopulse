@@ -3738,5 +3738,194 @@ body.sheet-collapsed {
   transform: scale(0.94);
 }
 
+/* =========================================================
+   CONFIGURAÇÃO TRACCAR CLIENT 24H (IOS SEGUNDO PLANO)
+========================================================= */
+.traccar-promo-card {
+  margin-top: 14px;
+  background: rgba(0, 122, 255, 0.08);
+  border: 1px solid rgba(0, 122, 255, 0.25);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
+.traccar-promo-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
 
+.traccar-promo-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+.traccar-promo-info strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.traccar-promo-info span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+.traccar-explainer-text {
+  font-size: 12.5px;
+  color: var(--text-body);
+  line-height: 1.45;
+  margin-bottom: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 10px 12px;
+  border-radius: var(--radius-btn);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.traccar-step-box {
+  background: var(--bg-surface);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-card);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.traccar-step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.step-num-badge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--apple-blue);
+  color: #FFFFFF;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.traccar-step-header strong {
+  font-size: 13px;
+  color: var(--text-main);
+}
+
+.traccar-step-box p {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.btn-apple-appstore {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #000000;
+  color: #FFFFFF;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: var(--radius-btn);
+  padding: 8px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all var(--duration-fast);
+  margin-top: 2px;
+}
+
+.btn-apple-appstore:hover {
+  background: #1c1c1e;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+.traccar-copy-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-btn);
+  padding: 4px 6px 4px 10px;
+}
+
+.traccar-copy-row input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--apple-blue);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-apple-copy {
+  background: var(--apple-blue);
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast);
+  flex-shrink: 0;
+}
+
+.btn-apple-copy:hover {
+  background: var(--apple-blue-hover);
+}
+
+.traccar-status-card {
+  margin-top: 12px;
+  background: rgba(14, 20, 34, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--radius-card);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.traccar-status-dot-wrap {
+  flex-shrink: 0;
+}
+
+.traccar-status-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.traccar-status-info strong {
+  display: block;
+  font-size: 12px;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.traccar-status-info span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

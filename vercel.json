@@ -17,7 +17,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets/|sw\\.js|manifest\\.json|icon\\.svg|favicon\\.svg).*)",
+      "source": "/((?!api/|assets/|sw\\.js|manifest\\.json|icon\\.svg|favicon\\.svg|geopulse\\.apk).*)",
       "destination": "/index.html"
     }
   ]

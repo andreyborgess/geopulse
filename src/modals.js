@@ -143,6 +143,76 @@ export function closeProfileModal() {
 }
 
 // ---------------------------------------------------------------------------
+// MODAL TRACCAR CLIENT (RASTREAMENTO 24H IOS)
+// ---------------------------------------------------------------------------
+export async function openTraccarModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-traccar');
+  if (!modal) return;
+
+  const urlInput = document.getElementById('input-traccar-server-url');
+  const idInput = document.getElementById('input-traccar-device-id');
+  const origin = window.location.origin;
+
+  const circleId = state.circleId || 'FAMILIA-1';
+  const userId = state.currentUser.id || 'me';
+
+  if (urlInput) {
+    urlInput.value = `${origin}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`;
+  }
+  if (idInput) {
+    idInput.value = userId;
+  }
+
+  modal.style.display = 'flex';
+  checkTraccarSignalStatus(circleId, userId);
+}
+
+export function closeTraccarModal() {
+  playTactileClick();
+  const modal = document.getElementById('modal-traccar');
+  if (modal) modal.style.display = 'none';
+}
+
+export async function checkTraccarSignalStatus(circleId, userId) {
+  const dot = document.getElementById('traccar-status-dot');
+  const title = document.getElementById('traccar-status-title');
+  const meta = document.getElementById('traccar-status-meta');
+
+  if (title) title.textContent = 'Verificando sinal no servidor...';
+
+  try {
+    const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`);
+    const data = await res.json();
+
+    if (data.lastPing && data.lastPing.updatedAt) {
+      const diffSec = Math.max(1, Math.round((Date.now() - data.lastPing.updatedAt) / 1000));
+      let timeText = `${diffSec}s atrás`;
+      if (diffSec > 60) timeText = `${Math.round(diffSec / 60)} min atrás`;
+
+      if (dot) {
+        dot.style.background = '#34C759';
+        dot.style.boxShadow = '0 0 10px #34C759';
+      }
+      if (title) title.textContent = '🟢 Sinal Traccar Ativo!';
+      if (meta) {
+        meta.textContent = `Último envio: ${timeText} · Bateria: ${data.lastPing.battery || 100}% · Vel: ${data.lastPing.speed || 0} km/h`;
+      }
+    } else {
+      if (dot) {
+        dot.style.background = '#FF9500';
+        dot.style.boxShadow = 'none';
+      }
+      if (title) title.textContent = 'Aguardando 1º sinal do Traccar...';
+      if (meta) meta.textContent = 'Abra o Traccar Client no iPhone e ative a chave "Status de Serviço".';
+    }
+  } catch (err) {
+    if (title) title.textContent = 'Servidor Online';
+    if (meta) meta.textContent = 'Pronto para receber transmissões do Traccar Client.';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // MODAL NOVO LUGAR SALVO
 // ---------------------------------------------------------------------------
 export function openPlaceModal() {
@@ -463,6 +533,62 @@ export function initModals() {
     eventBus.emit('user:profile-saved');
     closeProfileModal();
     showToast('Perfil atualizado com sucesso!', 'info');
+  });
+
+  // Traccar Client Setup Triggers
+  document.getElementById('btn-open-traccar-setup')?.addEventListener('click', openTraccarModal);
+  document.getElementById('btn-close-traccar-modal')?.addEventListener('click', closeTraccarModal);
+  document.getElementById('btn-done-traccar')?.addEventListener('click', closeTraccarModal);
+
+  document.getElementById('btn-copy-traccar-url')?.addEventListener('click', async () => {
+    playTactileClick();
+    const urlInput = document.getElementById('input-traccar-server-url');
+    if (urlInput?.value) {
+      try {
+        await navigator.clipboard.writeText(urlInput.value);
+        showToast('URL do Servidor copiada com sucesso!', 'info');
+      } catch (e) {
+        urlInput.select();
+        document.execCommand('copy');
+        showToast('URL copiada!', 'info');
+      }
+    }
+  });
+
+  document.getElementById('btn-copy-traccar-id')?.addEventListener('click', async () => {
+    playTactileClick();
+    const idInput = document.getElementById('input-traccar-device-id');
+    if (idInput?.value) {
+      try {
+        await navigator.clipboard.writeText(idInput.value);
+        showToast('ID do Dispositivo copiado!', 'info');
+      } catch (e) {
+        idInput.select();
+        document.execCommand('copy');
+        showToast('ID copiado!', 'info');
+      }
+    }
+  });
+
+  document.getElementById('btn-test-traccar-signal')?.addEventListener('click', async () => {
+    playTactileClick();
+    showToast('Enviando sinal de teste para simular o Traccar...', 'info');
+    const circleId = state.circleId || 'FAMILIA-1';
+    const userId = state.currentUser.id || 'me';
+    const lat = state.currentUser.lat || -23.55052;
+    const lon = state.currentUser.lng || -46.633308;
+    const batt = state.currentUser.battery || 95;
+
+    try {
+      const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&lat=${lat}&lon=${lon}&batt=${batt}&speed=10`);
+      const data = await res.json();
+      if (data.status === 'ok') {
+        showToast('Sinal de teste recebido e publicado com sucesso no círculo!', 'info');
+        checkTraccarSignalStatus(circleId, userId);
+      }
+    } catch (err) {
+      showToast('Erro ao testar sinal: ' + err.message, 'error');
+    }
   });
 
   // Modal Place triggers
