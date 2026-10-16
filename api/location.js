@@ -6,6 +6,14 @@ import mqtt from 'mqtt';
 // Cache em memória de últimos pings por chave circle:user
 const recentPings = new Map();
 
+// Mapeamento dinâmico de dispositivo Traccar -> { circleId, userId, userName }
+const deviceBindings = new Map();
+deviceBindings.set('93831419', {
+  circleId: 'FAMILIA-1',
+  userId: '93831419',
+  userName: 'Você (iPhone)',
+});
+
 function bufferToBase64Url(buffer) {
   return Buffer.from(buffer)
     .toString('base64')
@@ -67,11 +75,24 @@ export default async function handler(req, res) {
     }
   }
 
+  // Rota de binding: vincula ID do Traccar (ex: 93831419) ao circleId e userId do usuário
+  if (query.bind === '1' || body.bind === '1') {
+    const dev = (query.device || body.device || '').trim();
+    const c = (query.circle || body.circle || '').trim();
+    const u = (query.user || body.user || '').trim();
+    const n = (query.name || body.name || '').trim();
+    if (dev && c) {
+      deviceBindings.set(dev, { circleId: c, userId: u || dev, userName: n || 'Você (iPhone)' });
+      console.log(`[Traccar Bind] Dispositivo ${dev} vinculado ao círculo ${c} (usuário: ${u})`);
+    }
+    return res.status(200).json({ status: 'bound', device: dev, circle: c, user: u });
+  }
+
   // Resolução do ID do Círculo e do Usuário
   // Suporta:
   // 1. ?circle=FAMILIA-1234&user=user_xyz
   // 2. id / deviceid no formato "FAMILIA-1234:user_xyz" ou "FAMILIA-1234__user_xyz"
-  // 3. Fallback: id simples
+  // 3. Fallback: id simples (mapeado via deviceBindings)
   let rawCircle = query.circle || body.circle || '';
   let rawUser = query.user || body.user || query.id || body.id || query.deviceid || body.deviceid || '';
 
@@ -84,6 +105,20 @@ export default async function handler(req, res) {
       const parts = rawUser.split('__');
       rawCircle = parts[0];
       rawUser = parts.slice(1).join('__');
+    }
+  }
+
+  // Se o dispositivo foi vinculado pelo PWA
+  if (deviceBindings.has(rawUser)) {
+    const binding = deviceBindings.get(rawUser);
+    if (!rawCircle && binding.circleId) {
+      rawCircle = binding.circleId;
+    }
+    if (!query.user && !body.user && binding.userId) {
+      rawUser = binding.userId;
+    }
+    if (!body.name && !query.name && binding.userName) {
+      body.name = binding.userName;
     }
   }
 

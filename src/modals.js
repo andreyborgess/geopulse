@@ -156,16 +156,20 @@ export async function openTraccarModal() {
 
   const circleId = state.circleId || 'FAMILIA-1';
   const userId = state.currentUser.id || 'me';
+  const traccarDeviceId = localStorage.getItem('geopulse_traccar_id') || '93831419';
+
+  // Registra automaticamente o vínculo do Traccar ID com este usuário e círculo
+  fetch(`/api/location?bind=1&device=${encodeURIComponent(traccarDeviceId)}&circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&name=${encodeURIComponent(state.currentUser.name)}`).catch(() => {});
 
   if (urlInput) {
     urlInput.value = `${origin}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`;
   }
   if (idInput) {
-    idInput.value = userId;
+    idInput.value = traccarDeviceId;
   }
 
   modal.style.display = 'flex';
-  checkTraccarSignalStatus(circleId, userId);
+  checkTraccarSignalStatus(circleId, userId, traccarDeviceId);
 }
 
 export function closeTraccarModal() {
@@ -174,7 +178,7 @@ export function closeTraccarModal() {
   if (modal) modal.style.display = 'none';
 }
 
-export async function checkTraccarSignalStatus(circleId, userId) {
+export async function checkTraccarSignalStatus(circleId, userId, traccarId = '93831419') {
   const dot = document.getElementById('traccar-status-dot');
   const title = document.getElementById('traccar-status-title');
   const meta = document.getElementById('traccar-status-meta');
@@ -182,8 +186,14 @@ export async function checkTraccarSignalStatus(circleId, userId) {
   if (title) title.textContent = 'Verificando sinal no servidor...';
 
   try {
-    const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`);
-    const data = await res.json();
+    let res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`);
+    let data = await res.json();
+
+    if (!data.lastPing && traccarId) {
+      const altRes = await fetch(`/api/location?circle=FAMILIA-1&user=${encodeURIComponent(traccarId)}`);
+      const altData = await altRes.json();
+      if (altData.lastPing) data = altData;
+    }
 
     if (data.lastPing && data.lastPing.updatedAt) {
       const diffSec = Math.max(1, Math.round((Date.now() - data.lastPing.updatedAt) / 1000));
