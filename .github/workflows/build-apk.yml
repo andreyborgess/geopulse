@@ -65,12 +65,16 @@ jobs:
           if-no-files-found: warn
 
       - name: Deploy APK to Public Assets for Direct Vercel Download
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p public
           find android/app/build -name "*.apk" -exec cp {} public/geopulse.apk \;
           ls -lh public/geopulse.apk
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
           git add public/geopulse.apk
           git commit -m "chore: update geopulse.apk for direct vercel download [skip ci]" || true
           git push origin main || true
