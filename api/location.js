@@ -173,7 +173,7 @@ export default async function handler(req, res) {
     type: 'LOCATION',
     user: {
       id: userId,
-      name: body.name || query.name || undefined,
+      name: body.name || query.name || 'Você (iPhone)',
       lat,
       lng,
       accuracy,
