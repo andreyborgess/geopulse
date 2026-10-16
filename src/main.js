@@ -651,8 +651,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  const triggerDownloadFeedback = () => {
-    showToast('Baixando geopulse.apk... Toque no arquivo baixado para instalar!', 'info');
+  const triggerDownloadFeedback = (e) => {
+    fetch('/geopulse.apk', { method: 'HEAD' })
+      .then((res) => {
+        if (res.ok) {
+          showToast('Baixando geopulse.apk... Toque no arquivo baixado para instalar!', 'info');
+        } else {
+          // Redireciona para o artefato pronto no GitHub Actions caso ainda não esteja no public
+          showToast('Abrindo página de download do APK no GitHub Actions...', 'info');
+          setTimeout(() => {
+            window.open('https://github.com/andreyborgess/geopulse/actions', '_blank');
+          }, 600);
+        }
+      })
+      .catch(() => {
+        window.open('https://github.com/andreyborgess/geopulse/actions', '_blank');
+      });
   };
 
   document.getElementById('btn-download-apk-banner')?.addEventListener('click', triggerDownloadFeedback);
