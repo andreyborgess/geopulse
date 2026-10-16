@@ -52,7 +52,7 @@ jobs:
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug --stacktrace
+          ./gradlew assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log || (echo "=== GRADLE FAILURE LOG ===" && tail -n 60 ../gradle-build.log && exit 1)
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
