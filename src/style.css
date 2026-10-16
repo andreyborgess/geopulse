@@ -543,7 +543,8 @@ html, body {
 }
 
 #map-wrapper {
-  flex: 1;
+  flex: 1 1 100%;
+  width: 100%;
   height: 100%;
   position: relative;
 }
@@ -558,6 +559,56 @@ html, body {
 .leaflet-container {
   background-color: #090D16 !important;
   font-family: var(--font-sans) !important;
+}
+
+/* Banner Flutuante de Permissão de GPS */
+.gps-permission-banner {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 760;
+  width: calc(100% - 24px);
+  max-width: 440px;
+  pointer-events: auto;
+}
+
+.gps-banner-body {
+  background: rgba(14, 20, 34, 0.94);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid rgba(0, 122, 255, 0.4);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75), 0 0 20px rgba(0, 122, 255, 0.15);
+  border-radius: var(--radius-card);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.gps-banner-icon {
+  font-size: 20px;
+  color: var(--apple-blue);
+  flex-shrink: 0;
+}
+
+.gps-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.gps-banner-text strong {
+  display: block;
+  font-size: 12.5px;
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.gps-banner-text span {
+  display: block;
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 /* Banner de Rota Ativa no Topo */

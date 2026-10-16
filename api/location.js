@@ -131,6 +131,12 @@ export default async function handler(req, res) {
   const rawLon = query.lon ?? query.lng ?? body.lon ?? body.lng;
 
   if (rawLat === undefined || rawLon === undefined) {
+    const circlePings = [];
+    for (const [key, ping] of recentPings.entries()) {
+      if (ping && (ping.circleId === circleId || key.startsWith(`${circleId}:`))) {
+        circlePings.push(ping);
+      }
+    }
     const last = recentPings.get(cacheKey) || recentPings.get(`FAMILIA-1:${userId}`) || recentPings.get('FAMILIA-1:93831419');
     return res.status(200).json({
       status: 'waiting_for_signal',
@@ -138,6 +144,7 @@ export default async function handler(req, res) {
       circle: circleId,
       user: userId,
       lastPing: last || null,
+      allPings: circlePings,
       serverTime: Date.now(),
     });
   }

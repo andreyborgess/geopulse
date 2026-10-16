@@ -240,6 +240,40 @@ export async function syncTraccarLocation() {
     const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(traccarId)}`);
     if (!res.ok) return null;
     const data = await res.json();
+    let updatedAny = false;
+    let mainRemoteUser = null;
+
+    if (data && Array.isArray(data.allPings) && data.allPings.length > 0) {
+      data.allPings.forEach((p) => {
+        if (!p || !p.lat || !p.lng) return;
+        const sKmH = p.speed || 0;
+        const act = sKmH > 22 ? '🚗 Em trânsito' : (sKmH > 3 ? '🚶 Caminhando' : '📍 Parado');
+        const pId = p.userId || traccarId;
+        const pUser = {
+          id: pId,
+          name: p.userName || (pId === traccarId ? 'Andrey (iPhone)' : `iPhone Família (${pId.slice(-4)})`),
+          relation: 'Família 👨‍👩‍👧‍👦',
+          role: 'iPhone 24h GPS',
+          lat: p.lat,
+          lng: p.lng,
+          accuracy: p.accuracy || 10,
+          speed: sKmH,
+          heading: p.heading || 0,
+          battery: p.battery !== undefined ? p.battery : 85,
+          charging: !!p.charging,
+          activity: act,
+          color: pId === traccarId ? '#007AFF' : '#34C759',
+          avatar: '📱',
+          updatedAt: p.updatedAt || Date.now(),
+          isOnline: (Date.now() - (p.updatedAt || 0)) < 1000 * 60 * 30,
+          source: 'traccar_background',
+        };
+        const c = mergeRemoteMember(pUser);
+        if (c) updatedAny = true;
+        if (pId === traccarId) mainRemoteUser = pUser;
+      });
+    }
+
     if (data && data.lastPing && data.lastPing.lat && data.lastPing.lng) {
       const ping = data.lastPing;
       const speedKmH = ping.speed || 0;
@@ -248,7 +282,7 @@ export async function syncTraccarLocation() {
       const remoteUser = {
         id: ping.userId || traccarId,
         name: ping.userName || 'Andrey (iPhone)',
-        relation: 'Você',
+        relation: 'Família 👨‍👩‍👧‍👦',
         role: 'iPhone 24h GPS',
         lat: ping.lat,
         lng: ping.lng,
@@ -266,7 +300,11 @@ export async function syncTraccarLocation() {
       };
 
       const changed = mergeRemoteMember(remoteUser);
-      return { changed, remoteUser };
+      return { changed: changed || updatedAny, remoteUser: mainRemoteUser || remoteUser };
+    }
+
+    if (mainRemoteUser) {
+      return { changed: updatedAny, remoteUser: mainRemoteUser };
     }
   } catch (e) {
     // offline ou erro silencioso
@@ -385,6 +423,30 @@ export function initAppState() {
       state.members.delete(id);
     }
   });
+
+  // Dispositivo Traccar do Andrey (iPhone 24h) - garantido no círculo para visualização imediata
+  const traccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  if (!state.members.has(traccarId) && state.currentUser.id !== traccarId) {
+    state.members.set(traccarId, {
+      id: traccarId,
+      name: 'Andrey (iPhone)',
+      relation: 'Família 👨‍👩‍👧‍👦',
+      role: 'iPhone 24h GPS',
+      lat: -3.1372,
+      lng: -60.0000,
+      accuracy: 10,
+      speed: 0,
+      heading: 0,
+      battery: 65,
+      charging: false,
+      color: '#007AFF',
+      avatar: '📱',
+      activity: '📍 Parado (Traccar 24h)',
+      updatedAt: Date.now(),
+      isOnline: true,
+      source: 'traccar_background',
+    });
+  }
 
   // Salva lista limpa de membros reais no storage
   saveMembersToStorage();

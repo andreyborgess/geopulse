@@ -141,9 +141,10 @@ export function setupOnboardingModal() {
 
 export function checkAutoOpenOnboarding() {
   const urlParams = new URLSearchParams(window.location.search);
-  const isJoin = urlParams.get('join') === '1' || urlParams.has('circle');
+  const isExplicitJoin = urlParams.get('join') === '1' && urlParams.has('host');
 
-  if (!isOnboarded() || (isJoin && state.currentUser.name === 'Você')) {
+  // Só abre se for explicitamente um novo convidado vindo de link com ?join=1 e ?host=
+  if (isExplicitJoin && !isOnboarded()) {
     setTimeout(() => {
       const modal = document.getElementById('modal-onboarding');
       if (modal) {
