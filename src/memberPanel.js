@@ -3,7 +3,7 @@ import { state, removeMember, removeSavedPlace, saveMembersToStorage, broadcastR
 import { calculateDistance, formatDistance } from './geo.js';
 import { playTactileClick, playRadarPing, playGeofenceAlert } from './audio.js';
 import { broadcastRingDevice, broadcastMemberDeleted, broadcastPlaceDeleted } from './realtime.js';
-import { notifyGeofenceEvent } from './notifications.js';
+import { notifyGeofenceEvent, notifyRingSent } from './notifications.js';
 import { eventBus } from './eventBus.js';
 import { drawRouteToMember, getMapInstance } from './mapRenderer.js';
 
@@ -306,6 +306,7 @@ export function openMemberDetailSheet(member) {
       playRadarPing();
       broadcastRingDevice(member.id);
       broadcastRingLocal(member.id, state.currentUser.name);
+      notifyRingSent(member.name);
       eventBus.emit('toast:show', {
         message: `🔊 Enviando sinal sonoro para ${member.name}...`,
         type: 'info',

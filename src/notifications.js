@@ -184,31 +184,170 @@ export async function dispatchDeviceNotification(title, options = {}) {
   };
 
   // Se o navegador tem suporte a notificações nativas
-  if ('Notification' in window && Notification.permission === 'granted') {
-    try {
-      if ('serviceWorker' in navigator) {
-        // Tenta obter o registration pronto com timeout curto de 800ms para nunca travar
-        const reg = await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise((_, reject) => setTimeout(() => reject('timeout'), 800)),
-        ]);
-        if (reg && reg.showNotification) {
-          await reg.showNotification(title, mergedOptions);
-          return true;
-        }
-      }
-    } catch (e) {
-      // Ignora timeout e segue para fallback
+  if ('Notification' in window) {
+    if (Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch (e) {}
     }
 
-    try {
-      new Notification(title, mergedOptions);
-      return true;
-    } catch (e) {
-      console.debug('[Push] Erro ao instanciar Notification fallback:', e);
+    if (Notification.permission === 'granted') {
+      try {
+        if ('serviceWorker' in navigator) {
+          // Tenta obter o registration pronto com timeout curto de 800ms para nunca travar
+          const reg = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) => setTimeout(() => reject('timeout'), 800)),
+          ]);
+          if (reg && reg.showNotification) {
+            await reg.showNotification(title, mergedOptions);
+            return true;
+          }
+        }
+      } catch (e) {
+        // Ignora timeout e segue para fallback
+      }
+
+      try {
+        new Notification(title, mergedOptions);
+        return true;
+      } catch (e) {
+        console.debug('[Push] Erro ao instanciar Notification fallback:', e);
+      }
     }
   }
   return false;
+}
+
+/**
+ * =========================================================
+ * FEED & HISTÓRICO DE NOTIFICAÇÕES (CENTRAL DE NOTIFICAÇÕES)
+ * =========================================================
+ */
+
+export function getNotificationsFeed() {
+  try {
+    const saved = localStorage.getItem('geopulse_notifications_feed');
+    if (saved) return JSON.parse(saved);
+  } catch (e) {}
+  return [];
+}
+
+export function addNotificationToFeed(item) {
+  try {
+    const feed = getNotificationsFeed();
+    const newItem = {
+      id: item.id || `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      title: item.title || 'Notificação',
+      body: item.body || '',
+      icon: item.icon || '🔔',
+      type: item.type || 'info',
+      timestamp: item.timestamp || Date.now(),
+      read: false,
+    };
+    feed.unshift(newItem);
+    localStorage.setItem('geopulse_notifications_feed', JSON.stringify(feed.slice(0, 50)));
+    updateNotificationBadgeUI();
+  } catch (e) {}
+}
+
+export function clearNotificationsFeed() {
+  try {
+    localStorage.removeItem('geopulse_notifications_feed');
+    updateNotificationBadgeUI();
+  } catch (e) {}
+}
+
+export function markNotificationsAsRead() {
+  try {
+    const feed = getNotificationsFeed().map((n) => ({ ...n, read: true }));
+    localStorage.setItem('geopulse_notifications_feed', JSON.stringify(feed));
+    updateNotificationBadgeUI();
+  } catch (e) {}
+}
+
+export function updateNotificationBadgeUI() {
+  const dot = document.getElementById('header-notif-dot');
+  if (!dot) return;
+  const feed = getNotificationsFeed();
+  const unread = feed.filter((n) => !n.read).length;
+  if (unread > 0) {
+    dot.style.display = 'block';
+    dot.textContent = unread > 9 ? '9+' : String(unread);
+  } else {
+    dot.style.display = 'none';
+  }
+}
+
+/**
+ * Dispara notificação de Check-in ("Cheguei Bem 💚")
+ */
+export async function notifyCheckin(authorName = 'Você', isSelf = false) {
+  const title = isSelf ? '💚 Cheguei Bem!' : `💚 ${authorName} Chegou Bem!`;
+  const body = isSelf
+    ? 'Você avisou à família que chegou bem em segurança.'
+    : `${authorName} avisou ao círculo que chegou bem em segurança.`;
+
+  addNotificationToFeed({
+    type: 'checkin',
+    icon: '💚',
+    title,
+    body,
+    timestamp: Date.now(),
+  });
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-checkin-' + Date.now(),
+    vibrate: [60, 80, 100],
+    requireInteraction: false,
+  });
+}
+
+/**
+ * Dispara notificação de Mensagem Privada ou do Grupo no Chat
+ */
+export async function notifyChatMessage(senderName = 'Membro da Família', text = '') {
+  const title = `💬 ${senderName}`;
+  const body = text.length > 80 ? text.slice(0, 77) + '...' : text;
+
+  addNotificationToFeed({
+    type: 'chat',
+    icon: '💬',
+    title,
+    body,
+    timestamp: Date.now(),
+  });
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-chat-' + Date.now(),
+    vibrate: [40, 60, 40],
+    requireInteraction: false,
+  });
+}
+
+/**
+ * Dispara notificação de envio de toque sonoro (Find My Ring)
+ */
+export async function notifyRingSent(targetName = 'Aparelho') {
+  const title = '🔔 Localizar Aparelho';
+  const body = `Sinal sonoro de alta intensidade disparado para ${targetName}.`;
+
+  addNotificationToFeed({
+    type: 'ring',
+    icon: '🔔',
+    title,
+    body,
+    timestamp: Date.now(),
+  });
+
+  await dispatchDeviceNotification(title, {
+    body,
+    tag: 'geopulse-ring-sent-' + Date.now(),
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+  });
 }
 
 /**
@@ -220,6 +359,14 @@ export async function notifySOSAlert(authorName = 'Membro') {
 
   const title = '🚨 ALERTA SOS NA FAMÍLIA 👨‍👩‍👧‍👦';
   const body = `${authorName} acionou alerta de emergência no celular!`;
+
+  addNotificationToFeed({
+    type: 'sos',
+    icon: '🚨',
+    title,
+    body,
+    timestamp: Date.now(),
+  });
 
   await dispatchDeviceNotification(title, {
     body,
@@ -236,6 +383,14 @@ export async function notifyMemberJoined(memberName = 'Novo Membro') {
   const title = '👋 Novo Membro na Família 👨‍👩‍👧‍👦';
   const body = `${memberName} acabou de entrar no círculo familiar!`;
 
+  addNotificationToFeed({
+    type: 'join',
+    icon: '👋',
+    title,
+    body,
+    timestamp: Date.now(),
+  });
+
   await dispatchDeviceNotification(title, {
     body,
     tag: 'geopulse-join-' + Date.now(),
@@ -250,6 +405,14 @@ export async function notifyMemberJoined(memberName = 'Novo Membro') {
 export async function notifyFindMyRing(senderName = 'Alguém da família') {
   const title = '🔔 LOCALIZAR APARELHO';
   const body = `${senderName} está tocando o som deste aparelho para localizá-lo!`;
+
+  addNotificationToFeed({
+    type: 'ring',
+    icon: '🔔',
+    title,
+    body,
+    timestamp: Date.now(),
+  });
 
   await dispatchDeviceNotification(title, {
     body,
@@ -269,6 +432,14 @@ export async function notifyGeofenceEvent(memberName, action, fenceName, fenceIc
   const icon = fenceIcon || (action.includes('chegou') ? '🏠' : '📍');
   const title = `${icon} ${memberName} ${action} ${fenceName}`;
   const body = 'Círculo Família 👨‍👩‍👧‍👦 · Localização em tempo real';
+
+  addNotificationToFeed({
+    type: 'fence',
+    icon,
+    title,
+    body,
+    timestamp: Date.now(),
+  });
 
   await dispatchDeviceNotification(title, {
     body,

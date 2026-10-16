@@ -98,6 +98,8 @@ import {
   notifyFindMyRing,
   notifyMemberJoined,
   notifyGeofenceEvent,
+  notifyCheckin,
+  updateNotificationBadgeUI,
   isStandalone,
 } from './notifications.js';
 import { eventBus } from './eventBus.js';
@@ -119,6 +121,7 @@ function triggerQuickCheckin() {
   broadcastCheckin(msg);
   broadcastCheckinLocal(msg);
 
+  notifyCheckin(state.currentUser.name, true);
   showToast('💚 Você avisou a Família que chegou bem!', 'info');
 
   const btnText = document.querySelector('#btn-trigger-checkin span');
@@ -140,6 +143,7 @@ function handleIncomingCheckin(payload) {
   if (navigator.vibrate) {
     try { navigator.vibrate([60, 80]); } catch (e) {}
   }
+  notifyCheckin(name, false);
   showToast(`💚 ${name} avisou: ${payload.message || 'Cheguei bem!'}`, 'info');
 
   const member = state.members.get(payload.user.id);

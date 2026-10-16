@@ -6,6 +6,7 @@ import { broadcastChatLocal } from './sync.js';
 import { playChatMessageSound, playTactileClick } from './audio.js';
 import { showToast } from './modals.js';
 import { eventBus } from './eventBus.js';
+import { notifyChatMessage } from './notifications.js';
 
 let chatMessages = [];
 let activeChatThread = 'all'; // 'all' (Família) ou memberId específico
@@ -259,6 +260,9 @@ export function handleIncomingChatMessage(payload) {
 
   chatMessages.push(payload);
   saveMessagesToStorage();
+
+  // Dispara notificação push e registra na Central de Notificações
+  notifyChatMessage(payload.senderName, payload.text);
 
   const modal = document.getElementById('modal-chat');
   const isChatOpen = modal && modal.style.display !== 'none';

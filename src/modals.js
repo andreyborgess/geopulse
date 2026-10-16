@@ -4,7 +4,20 @@ import { playTactileClick, stopFindMyChime } from './audio.js';
 import { generateQRCodeSVG } from './qrcode.js';
 import { getExportedCryptoKey } from './crypto.js';
 import { broadcastPlaceSaved } from './realtime.js';
-import { isIOS, isStandalone, getPermissionStatus, requestPushPermission, triggerTestPushNotification, getOrRegisterSubscription, getNotificationPreferences, saveNotificationPreferences } from './notifications.js';
+import {
+  isIOS,
+  isStandalone,
+  getPermissionStatus,
+  requestPushPermission,
+  triggerTestPushNotification,
+  getOrRegisterSubscription,
+  getNotificationPreferences,
+  saveNotificationPreferences,
+  getNotificationsFeed,
+  clearNotificationsFeed,
+  markNotificationsAsRead,
+  updateNotificationBadgeUI,
+} from './notifications.js';
 import { eventBus } from './eventBus.js';
 import { getMapInstance } from './mapRenderer.js';
 
@@ -420,9 +433,59 @@ export function updateNotificationUI() {
   if (prefFence) prefFence.checked = prefs.fence !== false;
 }
 
+function formatNotifTimeAgo(ts) {
+  if (!ts) return 'agora';
+  const diffSec = Math.max(1, Math.round((Date.now() - ts) / 1000));
+  if (diffSec < 60) return `${diffSec}s atrás`;
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min atrás`;
+  const diffHours = Math.round(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h atrás`;
+  return `${Math.round(diffHours / 24)}d atrás`;
+}
+
+export function renderNotificationFeedUI() {
+  const container = document.getElementById('notif-feed-list');
+  if (!container) return;
+
+  const feed = getNotificationsFeed();
+
+  if (feed.length === 0) {
+    container.innerHTML = `
+      <div class="notif-feed-empty">
+        <span class="empty-notif-icon">🔔</span>
+        <strong>Nenhuma notificação recente</strong>
+        <span>Avisos de "Cheguei Bem", mensagens do chat e toques sonoros aparecerão aqui.</span>
+      </div>
+    `;
+    return;
+  }
+
+  let html = '';
+  feed.forEach((item) => {
+    const timeText = formatNotifTimeAgo(item.timestamp);
+    html += `
+      <div class="notif-feed-item ${item.read ? 'read' : 'unread'}">
+        <span class="notif-feed-item-icon">${item.icon || '🔔'}</span>
+        <div class="notif-feed-item-body">
+          <div class="notif-feed-item-top">
+            <strong class="notif-feed-item-title">${item.title}</strong>
+            <span class="notif-feed-item-time">${timeText}</span>
+          </div>
+          <p class="notif-feed-item-desc">${item.body}</p>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
 export function openNotificationsModal() {
   playTactileClick();
   updateNotificationUI();
+  renderNotificationFeedUI();
+  markNotificationsAsRead();
   const modal = document.getElementById('modal-notifications');
   if (modal) modal.style.display = 'flex';
 }
@@ -451,6 +514,17 @@ export function initModals() {
     if (nativeBox) nativeBox.style.display = 'none';
     showToast('GeoPulse instalado com sucesso no seu celular!', 'info');
     closeInstallPWAModal();
+  });
+
+  // Atualiza badge de notificações no início
+  updateNotificationBadgeUI();
+
+  // Listener para limpar histórico de notificações
+  document.getElementById('btn-clear-notif-feed')?.addEventListener('click', () => {
+    playTactileClick();
+    clearNotificationsFeed();
+    renderNotificationFeedUI();
+    showToast('Histórico de notificações limpo.', 'info');
   });
 
   // Modal Profile triggers
