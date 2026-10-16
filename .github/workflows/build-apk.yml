@@ -54,17 +54,21 @@ jobs:
           cd android
           ./gradlew assembleDebug --stacktrace 2>&1 | tee ../gradle-build.log || (echo "=== GRADLE FAILURE LOG ===" && tail -n 60 ../gradle-build.log && exit 1)
 
+      - name: Locate APK
+        run: find android/app/build -name "*.apk"
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: geopulse-android-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
+          path: android/app/build/outputs/apk/*/*/*.apk
+          if-no-files-found: warn
 
       - name: Deploy APK to Public Assets for Direct Vercel Download
         run: |
           mkdir -p public
-          cp android/app/build/outputs/apk/debug/app-debug.apk public/geopulse.apk
+          find android/app/build -name "*.apk" -exec cp {} public/geopulse.apk \;
+          ls -lh public/geopulse.apk
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add public/geopulse.apk
