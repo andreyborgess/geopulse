@@ -11,6 +11,7 @@ import {
   saveMembersToStorage,
   savePlacesToStorage,
   isOnboarded,
+  syncTraccarLocation,
 } from './sync.js';
 import {
   initCircleCrypto,
@@ -616,6 +617,22 @@ document.addEventListener('DOMContentLoaded', async () => {
   bindEventBus();
   setupNetworkConnections();
   updateNotificationUI();
+
+  // Sincronização automática e contínua do GPS 24h via Traccar Client (iPhone)
+  const runTraccarPoll = async () => {
+    try {
+      const result = await syncTraccarLocation();
+      if (result && result.remoteUser) {
+        updateMarkerForMember(result.remoteUser);
+        updateMarkerForMember(state.currentUser);
+        renderMembersList();
+        checkActivePlaces();
+        checkMemberLeaveAlerts(result.remoteUser);
+      }
+    } catch (e) {}
+  };
+  runTraccarPoll();
+  setInterval(runTraccarPoll, 10000);
 
   // Listener para botão de Check-in Rápido ("Cheguei Bem 💚")
   document.getElementById('btn-trigger-checkin')?.addEventListener('click', (e) => {

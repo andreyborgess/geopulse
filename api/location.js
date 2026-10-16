@@ -11,7 +11,7 @@ const deviceBindings = new Map();
 deviceBindings.set('93831419', {
   circleId: 'FAMILIA-1',
   userId: '93831419',
-  userName: 'Você (iPhone)',
+  userName: 'Andrey (iPhone)',
 });
 
 function bufferToBase64Url(buffer) {
@@ -131,7 +131,7 @@ export default async function handler(req, res) {
   const rawLon = query.lon ?? query.lng ?? body.lon ?? body.lng;
 
   if (rawLat === undefined || rawLon === undefined) {
-    const last = recentPings.get(cacheKey);
+    const last = recentPings.get(cacheKey) || recentPings.get(`FAMILIA-1:${userId}`) || recentPings.get('FAMILIA-1:93831419');
     return res.status(200).json({
       status: 'waiting_for_signal',
       message: 'GeoPulse Traccar Webhook Ativo. Envie coordenadas via lat e lon.',

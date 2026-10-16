@@ -94,13 +94,13 @@ function resolveCircleId() {
       return circleParam;
     }
   }
-  // 2. Fallback: valor salvo no localStorage
+  // 2. Fallback: valor salvo no localStorage (se não for antigo legado isolado)
   const saved = localStorage.getItem('geopulse_circle_id');
-  if (saved && saved !== 'FAMILIA-01') return saved;
-  // 3. Último recurso: gera novo ID criptograficamente forte
-  const newId = generateSecureCircleId();
-  localStorage.setItem('geopulse_circle_id', newId);
-  return newId;
+  if (saved && saved !== 'FAMILIA-01' && !saved.startsWith('gp_sec_')) return saved;
+  // 3. Padrão Familiar Unificado (compatível direto com Traccar Client & Webhook)
+  const defaultCircle = 'FAMILIA-1';
+  localStorage.setItem('geopulse_circle_id', defaultCircle);
+  return defaultCircle;
 }
 
 let initialCircleName = localStorage.getItem('geopulse_circle_name');
@@ -184,13 +184,28 @@ export function saveUserProfile({ name, relation, color, photo, avatar }) {
  * Retorna true se houver alteração
  */
 export function mergeRemoteMember(remoteUser) {
-  if (!remoteUser || !remoteUser.id || remoteUser.id === state.currentUser.id || remoteUser.isDemo) {
+  if (!remoteUser || !remoteUser.id || remoteUser.isDemo) {
     return false;
   }
 
-  // Se for uma mensagem ecoada do próprio aparelho com o mesmo ID
+  // Se for uma mensagem ecoada do próprio ID de sessão web
   if (remoteUser.id === state.currentUser.id) {
     return false;
+  }
+
+  const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const isTraccarPayload = remoteUser.source === 'traccar_background' || remoteUser.id === myTraccarId || remoteUser.id === '93831419';
+
+  // Se este aparelho for o iPhone rastreado, sincroniza a posição do usuário atual
+  if (isTraccarPayload && (typeof localStorage === 'undefined' || localStorage.getItem('geopulse_is_traccar_device') !== 'false')) {
+    state.currentUser.lat = remoteUser.lat;
+    state.currentUser.lng = remoteUser.lng;
+    if (remoteUser.accuracy) state.currentUser.accuracy = remoteUser.accuracy;
+    if (remoteUser.speed !== undefined) state.currentUser.speed = remoteUser.speed;
+    if (remoteUser.heading !== undefined) state.currentUser.heading = remoteUser.heading;
+    if (remoteUser.battery !== undefined) state.currentUser.battery = remoteUser.battery;
+    if (remoteUser.activity) state.currentUser.activity = remoteUser.activity;
+    state.currentUser.updatedAt = remoteUser.updatedAt || Date.now();
   }
 
   const existing = state.members.get(remoteUser.id);
@@ -210,6 +225,53 @@ export function mergeRemoteMember(remoteUser) {
     return true;
   }
   return false;
+}
+
+/**
+ * Sincroniza ativamente via HTTP com o endpoint /api/location do Vercel
+ * Garante que a última posição enviada pelo Traccar seja obtida instantaneamente,
+ * mesmo se o MQTT estiver conectando ou em reconexão.
+ */
+export async function syncTraccarLocation() {
+  const circleId = state.circleId || 'FAMILIA-1';
+  const traccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+
+  try {
+    const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(traccarId)}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (data && data.lastPing && data.lastPing.lat && data.lastPing.lng) {
+      const ping = data.lastPing;
+      const speedKmH = ping.speed || 0;
+      const activity = speedKmH > 22 ? '🚗 Em trânsito' : (speedKmH > 3 ? '🚶 Caminhando' : '📍 Parado');
+
+      const remoteUser = {
+        id: ping.userId || traccarId,
+        name: ping.userName || 'Andrey (iPhone)',
+        relation: 'Você',
+        role: 'iPhone 24h GPS',
+        lat: ping.lat,
+        lng: ping.lng,
+        accuracy: ping.accuracy || 10,
+        speed: speedKmH,
+        heading: ping.heading || 0,
+        battery: ping.battery !== undefined ? ping.battery : 85,
+        charging: !!ping.charging,
+        activity,
+        color: '#007AFF',
+        avatar: '📱',
+        updatedAt: ping.updatedAt || Date.now(),
+        isOnline: (Date.now() - (ping.updatedAt || 0)) < 1000 * 60 * 30,
+        source: 'traccar_background',
+      };
+
+      const changed = mergeRemoteMember(remoteUser);
+      return { changed, remoteUser };
+    }
+  } catch (e) {
+    // offline ou erro silencioso
+  }
+  return null;
 }
 
 /**
