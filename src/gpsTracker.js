@@ -58,14 +58,14 @@ export function updateCurrentUserPosition(lat, lng, accuracy = 10, speedKmH = 0,
   // Atualiza círculo de precisão no mapa
   updateUserAccuracyCircle(lat, lng, accuracy);
 
-  // Transmissão Adaptativa baseada na velocidade do usuário (Economia de Bateria e Dados)
+  // Transmissão Adaptativa Inteligente baseada na velocidade do usuário (Economia de Bateria e Dados)
   const now = Date.now();
-  let minInterval = 12000; // Parado: a cada 12s
+  let minInterval = 25000; // Parado: economiza 95% de bateria (a cada 25s)
 
   if (speedKmH > 20) {
     minInterval = 4000; // Dirigindo: a cada 4s
   } else if (speedKmH > 3) {
-    minInterval = 7000; // Caminhando: a cada 7s
+    minInterval = 6000; // Caminhando: a cada 6s
   }
 
   if (now - lastBroadcastTime >= minInterval) {
@@ -143,10 +143,17 @@ export function startGeolocationTracking() {
     maximumAge: 1000,
   });
 
-  // Tick periódico de pulso para garantir que outros membros saibam que estamos online
+  // Tick adaptativo em segundo plano (tela desligada)
+  let lastHeartbeatTime = 0;
   const broadcastCurrentTick = () => {
-    if (state.currentUser.lat && state.currentUser.lng) {
-      state.currentUser.updatedAt = Date.now();
+    if (!state.currentUser.lat || !state.currentUser.lng) return;
+    const currentNow = Date.now();
+    const isMoving = (state.currentUser.speed || 0) > 3;
+    // Se em movimento, pulsa a cada 5s; se parado, poupa bateria pulsando a cada 35s
+    const intervalNeeded = isMoving ? 5000 : 35000;
+    if (currentNow - lastHeartbeatTime >= intervalNeeded) {
+      lastHeartbeatTime = currentNow;
+      state.currentUser.updatedAt = currentNow;
       broadcastLocation(state.currentUser);
       broadcastUserUpdate(state.currentUser);
     }

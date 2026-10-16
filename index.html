@@ -132,6 +132,20 @@
             <button class="btn-apple-action btn-sm" id="btn-request-gps-banner">
               <span>Ativar GPS</span>
             </button>
+        <!-- Banner Inteligente para Celulares Android (Download do APK Nativo) -->
+        <div class="android-apk-banner" id="android-apk-banner" style="display: none;">
+          <div class="apk-banner-body">
+            <span class="apk-banner-icon">🤖</span>
+            <div class="apk-banner-text">
+              <strong>App Nativo Android 24h</strong>
+              <span>Rastreie com tela desligada sem ser suspenso.</span>
+            </div>
+            <div class="apk-banner-actions">
+              <a href="/geopulse.apk" download="geopulse.apk" class="btn-apple-action btn-sm" id="btn-download-apk-banner" style="background: #34C759; color: #FFF; text-decoration: none; padding: 6px 14px; font-weight: 600;">
+                <span>Baixar .APK</span>
+              </a>
+              <button class="btn-apk-close" id="btn-close-apk-banner" title="Dispensar">&times;</button>
+            </div>
           </div>
         </div>
 
@@ -575,6 +589,14 @@
                   <button class="btn-apple-action secondary" id="btn-submit-join-circle">Conectar</button>
                 </div>
               </div>
+
+              <!-- Download do APK Nativo Android -->
+              <div style="margin-top: 14px; text-align: center;">
+                <a href="/geopulse.apk" download="geopulse.apk" class="btn-apple-action secondary" id="btn-share-download-apk" style="width: 100%; justify-content: center; padding: 10px 14px; font-size: 13px; text-decoration: none; border: 1px solid rgba(52, 199, 89, 0.4); background: rgba(52, 199, 89, 0.08);">
+                  <span style="font-size: 18px;">🤖</span>
+                  <span style="font-weight: 600; color: #34C759;">Baixar App Nativo Android (.apk)</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -614,6 +636,11 @@
                   <span style="font-size: 20px;">📷</span>
                   <span style="font-weight: 600; color: var(--apple-blue);">Escanear QR Code com a Câmera</span>
                 </button>
+
+                <a href="/geopulse.apk" download="geopulse.apk" class="btn-apple-action secondary" id="btn-quick-share-download-apk" style="width: 100%; justify-content: flex-start; padding: 12px 16px; font-size: 14px; text-decoration: none; border: 1px solid rgba(52, 199, 89, 0.4); background: rgba(52, 199, 89, 0.08);">
+                  <span style="font-size: 20px;">🤖</span>
+                  <span style="font-weight: 600; color: #34C759;">Baixar App Android Nativo (.apk)</span>
+                </a>
               </div>
             </div>
           </div>

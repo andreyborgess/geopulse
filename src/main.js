@@ -635,6 +635,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   checkAutoOpenOnboarding();
 
+  // Detecção inteligente de Android para sugerir APK nativo com 24h background tracking
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isDismissed = sessionStorage.getItem('geopulse_dismiss_apk_banner') === 'true';
+  const apkBanner = document.getElementById('android-apk-banner');
+
+  if (isAndroid && !isStandalone() && !isDismissed && apkBanner) {
+    setTimeout(() => {
+      apkBanner.style.display = 'block';
+    }, 1500);
+
+    document.getElementById('btn-close-apk-banner')?.addEventListener('click', () => {
+      apkBanner.style.display = 'none';
+      sessionStorage.setItem('geopulse_dismiss_apk_banner', 'true');
+    });
+  }
+
+  const triggerDownloadFeedback = () => {
+    showToast('Baixando geopulse.apk... Toque no arquivo baixado para instalar!', 'info');
+  };
+
+  document.getElementById('btn-download-apk-banner')?.addEventListener('click', triggerDownloadFeedback);
+  document.getElementById('btn-share-download-apk')?.addEventListener('click', triggerDownloadFeedback);
+  document.getElementById('btn-quick-share-download-apk')?.addEventListener('click', triggerDownloadFeedback);
+
   const urlParams = new URLSearchParams(window.location.search);
   if ((urlParams.get('join') === '1' || urlParams.has('peer')) && !isStandalone() && isOnboarded()) {
     setTimeout(() => {

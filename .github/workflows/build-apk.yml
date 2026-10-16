@@ -5,6 +5,9 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build APK
@@ -13,6 +16,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -25,6 +30,9 @@ jobs:
         with:
           distribution: 'zulu'
           java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
       - name: Install NPM Dependencies
         run: npm install
@@ -47,7 +55,7 @@ jobs:
       - name: Build Debug APK
         run: |
           cd android
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -55,3 +63,13 @@ jobs:
           name: geopulse-android-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Deploy APK to Public Assets for Direct Vercel Download
+        run: |
+          mkdir -p public
+          cp android/app/build/outputs/apk/debug/app-debug.apk public/geopulse.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/geopulse.apk
+          git commit -m "chore: update geopulse.apk for direct vercel download [skip ci]" || true
+          git push origin main || true
