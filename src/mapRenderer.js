@@ -310,13 +310,8 @@ export function updateMarkerForMember(member) {
   if (!map || !member || !member.lat || !member.lng) return;
 
   const isMe = member.isMe || member.id === state.currentUser.id;
-
-  // Se for um registro ecoado do próprio usuário com id idêntico mas isMe falso
-  if (!member.isMe && member.id === state.currentUser.id) {
-    if (markersMap.has(member.id)) {
-      removeMarker(member.id);
-    }
-    return;
+  if (isMe) {
+    member.isMe = true;
   }
 
   const currentVisualKey = generateMarkerVisualKey(member);

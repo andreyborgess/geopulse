@@ -223,6 +223,18 @@ export function mergeRemoteMember(remoteUser) {
     });
     saveMembersToStorage();
     return true;
+  } else if (existing) {
+    // Mesmo com leve desvio de relógio entre aparelhos, atualiza batimento online e lastSeen
+    let updated = false;
+    if (remoteUser.isOnline !== undefined && existing.isOnline !== (remoteUser.isOnline !== false)) {
+      existing.isOnline = remoteUser.isOnline !== false;
+      updated = true;
+    }
+    existing.lastSeen = Date.now();
+    if (updated) {
+      saveMembersToStorage();
+      return true;
+    }
   }
   return false;
 }

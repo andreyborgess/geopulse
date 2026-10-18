@@ -727,6 +727,18 @@ export function initModals() {
     showToast(`Lugar "${name}" adicionado com sucesso!`, 'geofence');
   });
 
+  // Botão + rápido da gaveta (aba Pessoas → Conectar Novo Aparelho | aba Lugares → Novo Lugar)
+  document.getElementById('btn-sheet-quick-add')?.addEventListener('click', () => {
+    playTactileClick();
+    const tabPlaces = document.getElementById('tab-btn-places');
+    const isOnPlacesTab = tabPlaces?.classList.contains('active');
+    if (isOnPlacesTab) {
+      openPlaceModal();
+    } else {
+      openConnectDeviceModal();
+    }
+  });
+
   // Share Triggers
   document.getElementById('btn-share-circle')?.addEventListener('click', openQuickShare);
   document.getElementById('btn-circle-info')?.addEventListener('click', openQuickShare);
@@ -892,6 +904,27 @@ export function initModals() {
       }, 1000);
     } catch (e) {
       showToast('Erro: ' + e.message, 'error');
+    }
+  });
+
+  // Toggle e cópia da subscrição técnica Push
+  document.getElementById('btn-toggle-raw-sub')?.addEventListener('click', () => {
+    playTactileClick();
+    const container = document.getElementById('raw-sub-container');
+    const btn = document.getElementById('btn-toggle-raw-sub');
+    if (container) {
+      const isHidden = container.style.display === 'none';
+      container.style.display = isHidden ? 'block' : 'none';
+      if (btn) btn.textContent = isHidden ? 'Ocultar JSON Técnico' : 'Ver JSON Técnico';
+    }
+  });
+
+  document.getElementById('btn-copy-subscription')?.addEventListener('click', () => {
+    playTactileClick();
+    const codeEl = document.getElementById('sub-json-code');
+    if (codeEl?.textContent) {
+      navigator.clipboard.writeText(codeEl.textContent);
+      showToast('Objeto JSON copiado!', 'info');
     }
   });
 

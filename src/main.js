@@ -74,6 +74,8 @@ import {
   broadcastSOS,
   broadcastGeofenceAlert,
   broadcastCheckin,
+  broadcastPresence,
+  broadcastSyncRequest,
 } from './realtime.js';
 import {
   initP2PNetwork,
@@ -431,8 +433,7 @@ function setupNetworkConnections() {
         renderMembersList();
       }
     },
-    onPeerDisconnected: (disconnectedId) => {
-      if (disconnectedId) removeMarker(disconnectedId);
+    onPeerDisconnected: () => {
       renderMembersList();
       renderPlacesList();
     },
@@ -598,7 +599,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initAppState();
 
   // Inicializa Criptografia E2E (gera ou importa chave via fragmento #key=...)
-  await initCircleCrypto();
+  await initCircleCrypto(state.circleId);
 
   initMap();
   initAutoKeepAlive();
@@ -633,6 +634,23 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   runTraccarPoll();
   setInterval(runTraccarPoll, 10000);
+
+  // Re-sincronização imediata ao trazer o app de volta do segundo plano
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      broadcastPresence();
+      broadcastSyncRequest();
+      runTraccarPoll();
+    }
+  });
+
+  // Listener para ativar GPS a partir do banner flutuante
+  document.getElementById('btn-request-gps-banner')?.addEventListener('click', () => {
+    playTactileClick();
+    startGeolocationTracking();
+    const banner = document.getElementById('gps-permission-banner');
+    if (banner) banner.style.display = 'none';
+  });
 
   // Listener para botão de Check-in Rápido ("Cheguei Bem 💚")
   document.getElementById('btn-trigger-checkin')?.addEventListener('click', (e) => {

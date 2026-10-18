@@ -167,16 +167,18 @@ export async function initCircleCrypto(explicitCircleId = null) {
     }
   }
 
-  // 2. Resolve circleId com a mesma prioridade que sync.js: URL > localStorage > fallback
+  // 2. Resolve circleId com a mesma prioridade que sync.js: URL > explicit > localStorage > fallback
   let circleId = explicitCircleId;
   if (!circleId && typeof window !== 'undefined' && window.location.search) {
     const urlParams = new URLSearchParams(window.location.search);
     circleId = urlParams.get('circle') || null;
   }
   if (!circleId) {
-    circleId = localStorage.getItem('geopulse_circle_id');
-    if (!circleId) {
-      circleId = generateSecureCircleId();
+    const saved = localStorage.getItem('geopulse_circle_id');
+    if (saved && saved !== 'FAMILIA-01' && !saved.startsWith('gp_sec_')) {
+      circleId = saved;
+    } else {
+      circleId = 'FAMILIA-1';
       localStorage.setItem('geopulse_circle_id', circleId);
     }
   }

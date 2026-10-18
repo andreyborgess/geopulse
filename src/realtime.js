@@ -206,8 +206,9 @@ export async function initRealtimeNetwork({
             broadcastPresence();
             broadcastLocation(state.currentUser);
 
-            // Anuncia a entrada do aparelho no círculo
+            // Anuncia a entrada do aparelho no círculo e solicita sincronização dos membros online
             broadcastJoin();
+            broadcastSyncRequest();
 
             // Descarrega mensagens pendentes acumuladas enquanto estava offline
             flushOutbox(async (topic, payload, qos) => {
@@ -327,6 +328,14 @@ export async function initRealtimeNetwork({
           } else if (payload.type === 'CHAT_MESSAGE') {
             console.log('[Realtime] Mensagem de Chat Privado E2E recebida:', payload.senderName, payload.text);
             if (onChatMessageReceived) onChatMessageReceived(payload);
+
+          } else if (payload.type === 'SYNC_REQUEST') {
+            if (payload.senderId && payload.senderId !== state.currentUser.id) {
+              setTimeout(() => {
+                broadcastPresence();
+                broadcastLocation(state.currentUser);
+              }, 120 + Math.random() * 250);
+            }
           }
         } catch (err) {
           console.warn('[Realtime] Falha ao processar mensagem MQTT:', err);
@@ -567,4 +576,16 @@ export function broadcastChatMessage(chatMsg) {
 
   publishEncrypted('chat', payload, 1, false);
   return payload;
+}
+
+/**
+ * Solicita que todos os membros online do círculo reenviem imediatamente presença e localização
+ */
+export function broadcastSyncRequest() {
+  const payload = {
+    type: 'SYNC_REQUEST',
+    senderId: state.currentUser.id,
+    ts: Date.now(),
+  };
+  publishEncrypted('events', payload, 0, false);
 }

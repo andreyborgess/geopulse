@@ -44,7 +44,7 @@ export function renderMembersList() {
 
   const membersCardsHtml = allMembers
     .map((member) => {
-      const isMe = member.isMe;
+      const isMe = !!member.isMe || member.id === state.currentUser.id;
       const avatarText = member.avatar || member.name.slice(0, 2).toUpperCase();
       const color = member.color || (isMe ? '#007AFF' : '#EC4899');
       const photo = member.photo || '';
@@ -64,7 +64,8 @@ export function renderMembersList() {
           );
 
       const elapsedMs = Date.now() - (member.updatedAt || 0);
-      const isOnline = isMe || (member.isOnline !== false && elapsedMs < 1000 * 60 * 5);
+      const onlineThreshold = member.source === 'traccar_background' ? 1000 * 60 * 30 : 1000 * 60 * 15;
+      const isOnline = isMe || (member.isOnline !== false && elapsedMs < onlineThreshold);
       const dotClass = isOnline ? 'online' : 'offline';
       const displayName = isMe ? `${member.name} (Você)` : member.name;
       const relationText = isMe
