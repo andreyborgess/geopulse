@@ -652,6 +652,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (banner) banner.style.display = 'none';
   });
 
+  // Listener para dispensar banner de GPS
+  document.getElementById('btn-close-gps-banner')?.addEventListener('click', () => {
+    playTactileClick();
+    const banner = document.getElementById('gps-permission-banner');
+    if (banner) banner.style.display = 'none';
+    sessionStorage.setItem('geopulse_dismiss_gps_banner', 'true');
+  });
+
   // Listener para botão de Check-in Rápido ("Cheguei Bem 💚")
   document.getElementById('btn-trigger-checkin')?.addEventListener('click', (e) => {
     e.stopPropagation();

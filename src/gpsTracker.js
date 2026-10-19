@@ -127,8 +127,9 @@ export function startGeolocationTracking() {
 
   const onError = (err) => {
     console.debug('[GPS Tracker] Status:', err.code, err.message);
+    const isDismissed = sessionStorage.getItem('geopulse_dismiss_gps_banner') === 'true';
     const banner = document.getElementById('gps-permission-banner');
-    if (err.code === 1 && banner) banner.style.display = 'block';
+    if (err.code === 1 && banner && !isDismissed) banner.style.display = 'block';
   };
 
   navigator.geolocation.getCurrentPosition(onSuccess, onError, {

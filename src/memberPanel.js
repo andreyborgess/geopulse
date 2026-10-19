@@ -485,21 +485,31 @@ export function checkMemberLeaveAlerts(member) {
 }
 
 /**
- * Configura o controle do Bottom Sheet estilo Apple Maps
+ * Configura o controle do Bottom Sheet estilo Apple Maps com 3 snap-points:
+ * 'collapsed' (68px), 'half' (46dvh), 'expanded' (84dvh)
  */
 export function setupBottomSheet() {
   const mainContainer = document.querySelector('.main-container');
   const sidebar = document.getElementById('sidebar');
   const sheetHandle = document.getElementById('sheet-handle');
-  const sheetTabsRow = document.querySelector('.sheet-tabs-row');
+  const tabPeople = document.getElementById('tab-btn-people');
+  const tabPlaces = document.getElementById('tab-btn-places');
+  const panelPeople = document.getElementById('panel-people');
+  const panelPlaces = document.getElementById('panel-places');
 
-  const setSheetCollapsed = (collapsed) => {
-    if (collapsed) {
+  let currentMode = 'half'; // 'collapsed' | 'half' | 'expanded'
+
+  const applySheetMode = (mode) => {
+    currentMode = mode;
+    mainContainer?.classList.remove('sheet-collapsed', 'sheet-expanded');
+    sidebar?.classList.remove('collapsed', 'expanded');
+
+    if (mode === 'collapsed') {
       mainContainer?.classList.add('sheet-collapsed');
       sidebar?.classList.add('collapsed');
-    } else {
-      mainContainer?.classList.remove('sheet-collapsed');
-      sidebar?.classList.remove('collapsed');
+    } else if (mode === 'expanded') {
+      mainContainer?.classList.add('sheet-expanded');
+      sidebar?.classList.add('expanded');
     }
     setTimeout(() => {
       const map = getMapInstance();
@@ -507,57 +517,60 @@ export function setupBottomSheet() {
     }, 320);
   };
 
-  const toggleSheet = () => {
+  const cycleSheet = () => {
     playTactileClick();
-    const isCollapsed =
-      mainContainer?.classList.contains('sheet-collapsed') || sidebar?.classList.contains('collapsed');
-    setSheetCollapsed(!isCollapsed);
+    if (currentMode === 'collapsed') {
+      applySheetMode('half');
+    } else if (currentMode === 'half') {
+      applySheetMode('expanded');
+    } else {
+      applySheetMode('half');
+    }
   };
 
-  sheetHandle?.addEventListener('click', toggleSheet);
+  sheetHandle?.addEventListener('click', cycleSheet);
 
-  let sheetTouchStartY = 0;
-  const sheetTouchArea = sheetHandle || sheetTabsRow;
-  sheetTouchArea?.addEventListener(
-    'touchstart',
-    (e) => {
-      if (e.touches && e.touches.length > 0) {
-        sheetTouchStartY = e.touches[0].clientY;
-      }
-    },
-    { passive: true }
-  );
+  // Swipe / Drag no manipulador da gaveta
+  let startY = 0;
+  let isDragging = false;
 
-  sheetTouchArea?.addEventListener(
-    'touchend',
-    (e) => {
-      if (e.changedTouches && e.changedTouches.length > 0) {
-        const diff = e.changedTouches[0].clientY - sheetTouchStartY;
-        if (diff > 35) {
-          setSheetCollapsed(true);
-          playTactileClick();
-        } else if (diff < -35) {
-          setSheetCollapsed(false);
-          playTactileClick();
-        }
+  const onTouchStart = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      startY = e.touches[0].clientY;
+      isDragging = true;
+    }
+  };
+
+  const onTouchEnd = (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      const diff = e.changedTouches[0].clientY - startY;
+      if (diff > 45) {
+        // Deslize para baixo
+        if (currentMode === 'expanded') applySheetMode('half');
+        else applySheetMode('collapsed');
+        playTactileClick();
+      } else if (diff < -45) {
+        // Deslize para cima
+        if (currentMode === 'collapsed') applySheetMode('half');
+        else applySheetMode('expanded');
+        playTactileClick();
       }
-    },
-    { passive: true }
-  );
+    }
+  };
+
+  sheetHandle?.addEventListener('touchstart', onTouchStart, { passive: true });
+  sheetHandle?.addEventListener('touchend', onTouchEnd, { passive: true });
 
   // Alternador de Abas (Pessoas vs Lugares)
-  const tabPeople = document.getElementById('tab-btn-people');
-  const tabPlaces = document.getElementById('tab-btn-places');
-  const panelPeople = document.getElementById('panel-people');
-  const panelPlaces = document.getElementById('panel-places');
-
   tabPeople?.addEventListener('click', () => {
     playTactileClick();
     tabPeople.classList.add('active');
     tabPlaces?.classList.remove('active');
     if (panelPeople) panelPeople.style.display = 'flex';
     if (panelPlaces) panelPlaces.style.display = 'none';
-    setSheetCollapsed(false);
+    if (currentMode === 'collapsed') applySheetMode('half');
   });
 
   tabPlaces?.addEventListener('click', () => {
@@ -566,7 +579,7 @@ export function setupBottomSheet() {
     tabPeople?.classList.remove('active');
     if (panelPlaces) panelPlaces.style.display = 'flex';
     if (panelPeople) panelPeople.style.display = 'none';
-    setSheetCollapsed(false);
+    if (currentMode === 'collapsed') applySheetMode('half');
   });
 
   // Configuração global de fechamento da Ficha de Detalhes do Membro (X, Backdrop, Swipe down, ESC)

@@ -543,8 +543,8 @@ html, body {
 }
 
 #map-wrapper {
-  flex: 1 1 100%;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 100%;
   position: relative;
 }
@@ -585,6 +585,30 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+}
+
+.gps-banner-actions-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-banner-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  transition: all var(--duration-fast);
+}
+
+.btn-banner-close:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .gps-banner-icon {
@@ -941,6 +965,7 @@ html, body {
 ========================================================= */
 .apple-sheet {
   width: 380px;
+  flex-shrink: 0;
   background: var(--bg-surface);
   border-left: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: -8px 0 32px rgba(0, 0, 0, 0.6);
@@ -2839,12 +2864,17 @@ input:checked + .slider:before {
    RESPONSIVIDADE MOBILE (iOS BOTTOM SHEET & MAP SYNC)
 ========================================================= */
 :root {
-  --sheet-mobile-h: 36dvh;
+  --sheet-mobile-h: 46dvh;
 }
 
 .main-container.sheet-collapsed,
 body.sheet-collapsed {
-  --sheet-mobile-h: calc(60px + env(safe-area-inset-bottom, 0px));
+  --sheet-mobile-h: calc(68px + env(safe-area-inset-bottom, 0px));
+}
+
+.main-container.sheet-expanded,
+body.sheet-expanded {
+  --sheet-mobile-h: 84dvh;
 }
 
 @media (max-width: 768px) {
@@ -2953,7 +2983,7 @@ body.sheet-collapsed {
     right: 0;
     width: 100%;
     height: var(--sheet-mobile-h);
-    max-height: 85dvh;
+    max-height: 88dvh;
     border-left: none;
     border-top: 1px solid rgba(255, 255, 255, 0.14);
     border-radius: 24px 24px 0 0;
@@ -2977,7 +3007,12 @@ body.sheet-collapsed {
 
   .apple-sheet.collapsed,
   .main-container.sheet-collapsed .apple-sheet {
-    height: calc(60px + env(safe-area-inset-bottom, 0px)) !important;
+    height: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .apple-sheet.expanded,
+  .main-container.sheet-expanded .apple-sheet {
+    height: 84dvh !important;
   }
 
   .main-container.sheet-collapsed .apple-sheet .sheet-content-panel,
@@ -2985,9 +3020,9 @@ body.sheet-collapsed {
     display: none !important;
   }
 
-  /* No mobile, usuários utilizam gesto de pinça para zoom */
+  /* No mobile: mantenha controles de zoom visíveis e clicáveis */
   .map-zoom-group {
-    display: none !important;
+    display: flex !important;
   }
 
   .btn-map-control {
@@ -3004,35 +3039,44 @@ body.sheet-collapsed {
 
   /* Controles Flutuantes do Mapa - Acompanham dinamicamente a altura da gaveta */
   .apple-map-controls {
-    bottom: calc(var(--sheet-mobile-h) + 10px);
+    bottom: calc(var(--sheet-mobile-h) + 12px);
     top: auto;
-    right: 10px;
+    right: 12px;
     gap: 6px;
     transition: bottom 0.3s cubic-bezier(0.25, 1, 0.3, 1);
-    z-index: 600;
+    z-index: 750;
+    pointer-events: auto;
   }
 
   .main-container.sheet-collapsed .apple-map-controls {
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 10px) !important;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px) + 12px) !important;
+  }
+
+  .main-container.sheet-expanded .apple-map-controls {
+    display: none !important;
   }
 
   /* Pílula de Telemetria no Rodapé - Nunca encobre controles nem corta */
   .map-status-pill {
-    bottom: calc(var(--sheet-mobile-h) + 10px);
-    left: 10px;
-    max-width: calc(100vw - 64px);
+    bottom: calc(var(--sheet-mobile-h) + 12px);
+    left: 12px;
+    max-width: calc(100vw - 80px);
     box-sizing: border-box;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    padding: 4px 8px;
-    font-size: 10px;
+    padding: 5px 10px;
+    font-size: 10.5px;
     transition: bottom 0.3s cubic-bezier(0.25, 1, 0.3, 1);
-    z-index: 600;
+    z-index: 750;
   }
 
   .main-container.sheet-collapsed .map-status-pill {
-    bottom: calc(60px + env(safe-area-inset-bottom, 0px) + 10px) !important;
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px) + 12px) !important;
+  }
+
+  .main-container.sheet-expanded .map-status-pill {
+    display: none !important;
   }
 
   .toast-container {

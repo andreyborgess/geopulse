@@ -184,12 +184,12 @@ export function saveUserProfile({ name, relation, color, photo, avatar }) {
  * Retorna true se houver alteração
  */
 export function mergeRemoteMember(remoteUser) {
-  if (!remoteUser || !remoteUser.id || remoteUser.isDemo) {
+  if (!remoteUser || !remoteUser.id) {
     return false;
   }
 
-  // Se for uma mensagem ecoada do próprio ID de sessão web
-  if (remoteUser.id === state.currentUser.id) {
+  // Se for uma mensagem ecoada do próprio ID de sessão web ou fantasma não-identificado "Você"
+  if (remoteUser.id === state.currentUser.id || (remoteUser.name === 'Você' && remoteUser.id.startsWith('user_'))) {
     return false;
   }
 
@@ -412,27 +412,36 @@ export function initAppState() {
 
         // Filtra e carrega apenas membros reais externos (outros celulares)
         parsed.forEach((m) => {
-          if (!m || !m.id || m.id === state.currentUser.id || m.isMe) {
-            return; // NUNCA adiciona o próprio usuário na lista de membros remotos
+          if (!m || !m.id || m.id === state.currentUser.id || m.isMe || (m.name === 'Você' && m.id.startsWith('user_'))) {
+            return; // NUNCA adiciona o próprio usuário ou fantasmas Você na lista de membros remotos
           }
 
-          // Preserva apenas membros reais externos (ignora dados legados de demo)
-          if (!m.isDemo && m.id !== 'member_mariana' && m.id !== 'member_lucas' && m.id !== 'member_carlos') {
-            state.members.set(m.id, {
-              ...m,
-              isMe: false,
-            });
-          }
+          state.members.set(m.id, {
+            ...m,
+            isMe: false,
+          });
         });
       }
     } catch (e) {}
   }
 
-  // Remove qualquer membro que tenha o mesmo ID do usuário atual
+  // Remove qualquer membro que tenha o mesmo ID do usuário atual ou seja fantasma 'Você'
   state.members.delete(state.currentUser.id);
   Array.from(state.members.entries()).forEach(([id, m]) => {
-    if (m.isMe || id === state.currentUser.id) {
+    if (m.isMe || id === state.currentUser.id || (m.name === 'Você' && id.startsWith('user_'))) {
       state.members.delete(id);
+    }
+  });
+
+  // Garante a presença dos membros do Círculo Familiar (Mariana e Lucas)
+  DEFAULT_DEMO_MEMBERS.forEach((demoMember) => {
+    if (!state.members.has(demoMember.id) && state.currentUser.id !== demoMember.id) {
+      state.members.set(demoMember.id, {
+        ...demoMember,
+        isMe: false,
+        isOnline: true,
+        updatedAt: Date.now() - 1000 * 60 * 4,
+      });
     }
   });
 
@@ -451,8 +460,9 @@ export function initAppState() {
       heading: 0,
       battery: 65,
       charging: false,
-      color: '#007AFF',
+      color: '#34C759',
       avatar: '📱',
+      photo: '',
       activity: '📍 Parado (Traccar 24h)',
       updatedAt: Date.now(),
       isOnline: true,
@@ -490,7 +500,8 @@ export function saveMembersToStorage() {
   const membersArray = Array.from(state.members.values()).filter(
     (m) =>
       !m.isMe &&
-      m.id !== state.currentUser.id
+      m.id !== state.currentUser.id &&
+      !(m.name === 'Você' && m.id.startsWith('user_'))
   );
   localStorage.setItem('geopulse_members_data', JSON.stringify(membersArray));
 }
