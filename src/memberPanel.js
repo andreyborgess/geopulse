@@ -530,11 +530,17 @@ export function setupBottomSheet() {
 
   sheetHandle?.addEventListener('click', cycleSheet);
 
-  // Swipe / Drag no manipulador da gaveta
+  const sheetTabsRow = document.querySelector('.sheet-tabs-row');
+
+  // Swipe / Drag no manipulador ou cabeçalho da gaveta
   let startY = 0;
   let isDragging = false;
 
   const onTouchStart = (e) => {
+    // Não interfere em cliques nos botões de abas ou ações
+    if (e.target && (e.target.closest('.sheet-tab') || e.target.closest('.btn-sheet-action'))) {
+      return;
+    }
     if (e.touches && e.touches.length > 0) {
       startY = e.touches[0].clientY;
       isDragging = true;
@@ -546,12 +552,12 @@ export function setupBottomSheet() {
     isDragging = false;
     if (e.changedTouches && e.changedTouches.length > 0) {
       const diff = e.changedTouches[0].clientY - startY;
-      if (diff > 45) {
+      if (diff > 40) {
         // Deslize para baixo
         if (currentMode === 'expanded') applySheetMode('half');
         else applySheetMode('collapsed');
         playTactileClick();
-      } else if (diff < -45) {
+      } else if (diff < -40) {
         // Deslize para cima
         if (currentMode === 'collapsed') applySheetMode('half');
         else applySheetMode('expanded');
@@ -560,8 +566,10 @@ export function setupBottomSheet() {
     }
   };
 
-  sheetHandle?.addEventListener('touchstart', onTouchStart, { passive: true });
-  sheetHandle?.addEventListener('touchend', onTouchEnd, { passive: true });
+  [sheetHandle, sheetTabsRow].forEach((el) => {
+    el?.addEventListener('touchstart', onTouchStart, { passive: true });
+    el?.addEventListener('touchend', onTouchEnd, { passive: true });
+  });
 
   // Alternador de Abas (Pessoas vs Lugares)
   tabPeople?.addEventListener('click', () => {

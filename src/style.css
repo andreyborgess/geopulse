@@ -108,6 +108,17 @@ html, body {
   box-sizing: border-box;
 }
 
+/* Garante que campos de texto, inputs e seletores permitam foco, digitação e seleção de texto */
+input, textarea, select, [contenteditable="true"] {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -webkit-touch-callout: default !important;
+}
+
+button, [role="button"], a {
+  touch-action: manipulation;
+}
+
 #app {
   width: 100%;
   max-width: 100vw;
@@ -126,7 +137,7 @@ html, body {
 .ambient-noise-overlay {
   position: fixed;
   inset: 0;
-  pointer-events: none;
+  pointer-events: none !important;
   background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 0);
   background-size: 24px 24px;
   z-index: 10;
@@ -2996,13 +3007,23 @@ body.sheet-expanded {
 
   .sheet-drag-handle {
     display: block;
-    width: 44px;
+    width: 48px;
     height: 5px;
     border-radius: var(--radius-pill);
-    background: rgba(255, 255, 255, 0.35);
-    margin: 8px auto 4px auto;
+    background: rgba(255, 255, 255, 0.45);
+    margin: 10px auto 6px auto;
     cursor: grab;
     touch-action: none;
+    position: relative;
+  }
+
+  .sheet-drag-handle::before {
+    content: '';
+    position: absolute;
+    top: -14px;
+    bottom: -14px;
+    left: -30px;
+    right: -30px;
   }
 
   .apple-sheet.collapsed,

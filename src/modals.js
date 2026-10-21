@@ -29,14 +29,26 @@ let deferredPwaPrompt = null;
  */
 export function compressImageFile(file, maxSize = 240, quality = 0.85) {
   return new Promise((resolve, reject) => {
-    if (!file || !file.type.startsWith('image/')) {
+    if (!file) {
+      return reject(new Error('Nenhum arquivo selecionado.'));
+    }
+    const isImageMime = file.type && file.type.startsWith('image/');
+    const isImageExt = file.name && /\.(jpe?g|png|webp|gif|heic|heif|bmp)$/i.test(file.name);
+    if (!isImageMime && !isImageExt && file.type !== '') {
       return reject(new Error('Selecione uma imagem válida da galeria.'));
     }
     const reader = new FileReader();
     reader.onerror = () => reject(new Error('Erro ao ler a foto do celular.'));
     reader.onload = (e) => {
       const img = new Image();
-      img.onerror = () => reject(new Error('Não foi possível carregar a imagem.'));
+      img.onerror = () => {
+        // Fallback: se o browser não conseguir decodificar via Image element, passa a dataURL crua
+        if (e.target.result && typeof e.target.result === 'string') {
+          resolve(e.target.result);
+        } else {
+          reject(new Error('Não foi possível carregar a imagem selecionada.'));
+        }
+      };
       img.onload = () => {
         try {
           const canvas = document.createElement('canvas');
@@ -52,7 +64,7 @@ export function compressImageFile(file, maxSize = 240, quality = 0.85) {
           const dataUrl = canvas.toDataURL('image/jpeg', quality);
           resolve(dataUrl);
         } catch (err) {
-          reject(err);
+          resolve(e.target.result);
         }
       };
       img.src = e.target.result;
@@ -165,7 +177,8 @@ export async function openTraccarModal() {
 
   const urlInput = document.getElementById('input-traccar-server-url');
   const idInput = document.getElementById('input-traccar-device-id');
-  const origin = window.location.origin;
+  const isLocalOrCap = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'capacitor:';
+  const serverOrigin = isLocalOrCap ? 'https://loc-sigma-mauve.vercel.app' : window.location.origin;
 
   const circleId = state.circleId || 'FAMILIA-1';
   const userId = state.currentUser.id || 'me';
@@ -175,7 +188,7 @@ export async function openTraccarModal() {
   fetch(`/api/location?bind=1&device=${encodeURIComponent(traccarDeviceId)}&circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&name=${encodeURIComponent(state.currentUser.name)}`).catch(() => {});
 
   if (urlInput) {
-    urlInput.value = `${origin}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`;
+    urlInput.value = `${serverOrigin}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`;
   }
   if (idInput) {
     idInput.value = traccarDeviceId;
@@ -547,7 +560,10 @@ export function initModals() {
 
   btnPickGallery?.addEventListener('click', openPhoneGallery);
   btnTriggerAvatar?.addEventListener('click', openPhoneGallery);
-  btnTriggerBadge?.addEventListener('click', openPhoneGallery);
+  btnTriggerBadge?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    openPhoneGallery();
+  });
 
   inputProfileFile?.addEventListener('change', async (e) => {
     const file = e.target.files?.[0];
@@ -741,7 +757,7 @@ export function initModals() {
 
   // Share Triggers
   document.getElementById('btn-share-circle')?.addEventListener('click', openQuickShare);
-  document.getElementById('btn-circle-info')?.addEventListener('click', openQuickShare);
+  document.getElementById('btn-circle-info')?.addEventListener('click', openConnectDeviceModal);
   document.getElementById('btn-close-share-modal')?.addEventListener('click', closeConnectDeviceModal);
   document.getElementById('btn-close-quick-share')?.addEventListener('click', closeQuickShare);
   document.getElementById('btn-invite-flow')?.addEventListener('click', openConnectDeviceModal);
@@ -973,11 +989,31 @@ export function initModals() {
   eventBus.on('modal:open-share', openConnectDeviceModal);
   eventBus.on('modal:open-profile', openProfileModal);
 
-  // Fecha modal de perfil ao tocar no backdrop
-  const modalProfile = document.getElementById('modal-profile');
-  modalProfile?.addEventListener('click', (e) => {
-    if (e.target === modalProfile) {
-      closeProfileModal();
-    }
+  // Fecha modais ao tocar no backdrop fora do cartão
+  const backdropClosers = [
+    { id: 'modal-profile', close: closeProfileModal },
+    { id: 'modal-traccar', close: closeTraccarModal },
+    { id: 'modal-place', close: closePlaceModal },
+    { id: 'modal-share', close: closeConnectDeviceModal },
+    { id: 'modal-quick-share', close: closeQuickShare },
+    { id: 'modal-notifications', close: closeNotificationsModal },
+    { id: 'modal-install-pwa', close: closeInstallPWAModal },
+    { id: 'modal-sos-confirm', close: () => {
+      const m = document.getElementById('modal-sos-confirm');
+      if (m) m.style.display = 'none';
+    }},
+    { id: 'modal-onboarding', close: () => {
+      const m = document.getElementById('modal-onboarding');
+      if (m) m.style.display = 'none';
+    }},
+  ];
+
+  backdropClosers.forEach(({ id, close }) => {
+    const el = document.getElementById(id);
+    el?.addEventListener('click', (e) => {
+      if (e.target === el) {
+        close();
+      }
+    });
   });
 }

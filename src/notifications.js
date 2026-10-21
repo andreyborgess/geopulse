@@ -1,8 +1,8 @@
 // GeoPulse - Gerenciador de Notificações Push Nativas (APNs / FCM / Web Push)
 
-// Chave pública VAPID padrão para testes locais/staging (Web Push W3C)
+// Chave pública VAPID padrão para testes locais/staging (Web Push W3C) - P-256 65 bytes
 export const DEFAULT_VAPID_PUBLIC_KEY =
-  'BCz5e8OqYf0Fm5zV4U8v1V0m5P0Xl3P7r6k0Y1p4K9l6O8a2I7m4Q3x9R5t8Y2u1I0o3P5a7S9d2F4g6H8j0K2l4';
+  'BKCGJW-DNll-FtBODtj30eNGXB8ad4KJj0IaLxOgR7YjA5e6VBImW0Bq6x1anfNP1lWxgq6S1RqOeF1konw0aTc';
 
 /**
  * Converte chave pública VAPID base64 URL safe para Uint8Array

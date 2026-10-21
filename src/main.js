@@ -594,30 +594,106 @@ window.addEventListener('beforeunload', (e) => {
 /* =========================================================
    BOOTSTRAP PRINCIPAL
 ========================================================= */
-document.addEventListener('DOMContentLoaded', async () => {
-  clearMediaSessionWidget();
-  initAppState();
+let isAppBootstrapped = false;
+
+async function bootstrapApp() {
+  if (isAppBootstrapped) return;
+  isAppBootstrapped = true;
+
+  try { clearMediaSessionWidget(); } catch (e) {}
+
+  try {
+    initAppState();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao inicializar estado da aplicação:', err);
+  }
 
   // Inicializa Criptografia E2E (gera ou importa chave via fragmento #key=...)
-  await initCircleCrypto(state.circleId);
+  try {
+    await initCircleCrypto(state.circleId);
+  } catch (err) {
+    console.warn('[Bootstrap] Criptografia E2E em modo degradado:', err);
+  }
 
-  initMap();
-  initAutoKeepAlive();
-  startGeolocationTracking();
-  registerServiceWorker();
+  try {
+    initMap();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao inicializar Mapa Leaflet:', err);
+  }
 
-  updateHeaderProfileUI();
-  renderMembersList();
-  renderPlacesList();
-  setupBottomSheet();
-  setupMapControls();
-  setupSearch();
-  initModals();
-  setupOnboardingModal();
+  try {
+    initAutoKeepAlive();
+  } catch (err) {
+    console.debug('[Bootstrap] KeepAlive não suportado:', err);
+  }
 
-  bindEventBus();
-  setupNetworkConnections();
-  updateNotificationUI();
+  try {
+    startGeolocationTracking();
+  } catch (err) {
+    console.warn('[Bootstrap] Geolocation error:', err);
+  }
+
+  try {
+    registerServiceWorker();
+  } catch (err) {
+    console.debug('[Bootstrap] SW register error:', err);
+  }
+
+  try {
+    updateHeaderProfileUI();
+    renderMembersList();
+    renderPlacesList();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao renderizar painéis iniciais:', err);
+  }
+
+  try {
+    setupBottomSheet();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao configurar bottom sheet:', err);
+  }
+
+  try {
+    setupMapControls();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao configurar controles do mapa:', err);
+  }
+
+  try {
+    setupSearch();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao configurar busca:', err);
+  }
+
+  try {
+    initModals();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao inicializar modais:', err);
+  }
+
+  try {
+    setupOnboardingModal();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao configurar onboarding:', err);
+  }
+
+  try {
+    bindEventBus();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao vincular EventBus:', err);
+  }
+
+  try {
+    setupNetworkConnections();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao configurar rede realtime:', err);
+  }
+
+  try {
+    updateNotificationUI();
+  } catch (err) {
+    console.debug('[Bootstrap] Notificações UI:', err);
+  }
 
   // Sincronização automática e contínua do GPS 24h via Traccar Client (iPhone)
   const runTraccarPoll = async () => {
@@ -638,9 +714,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Re-sincronização imediata ao trazer o app de volta do segundo plano
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      broadcastPresence();
-      broadcastSyncRequest();
-      runTraccarPoll();
+      try {
+        broadcastPresence();
+        broadcastSyncRequest();
+        runTraccarPoll();
+      } catch (e) {}
     }
   });
 
@@ -678,9 +756,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // Inicializa Chat Privado Criptografado E2E
-  initChatUI();
+  try {
+    initChatUI();
+  } catch (err) {
+    console.error('[Bootstrap] Erro ao inicializar chat:', err);
+  }
 
-  checkAutoOpenOnboarding();
+  try {
+    checkAutoOpenOnboarding();
+  } catch (err) {
+    console.error('[Bootstrap] Erro em checkAutoOpenOnboarding:', err);
+  }
 
   // Detecção inteligente de Android para sugerir APK nativo com 24h background tracking
   const isAndroid = /Android/i.test(navigator.userAgent);
@@ -704,7 +790,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (res.ok) {
           showToast('Baixando geopulse.apk... Toque no arquivo baixado para instalar!', 'info');
         } else {
-          // Redireciona para o artefato pronto no GitHub Actions caso ainda não esteja no public
           showToast('Abrindo página de download do APK no GitHub Actions...', 'info');
           setTimeout(() => {
             window.open('https://github.com/andreyborgess/geopulse/actions', '_blank');
@@ -727,4 +812,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       showToast('Conectado ao círculo! Instale na tela inicial para conexão contínua.', 'info');
     }, 800);
   }
-});
+}
+
+// Disparo seguro e resiliente: se o DOM já carregou, executa imediatamente; caso contrário aguarda
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapApp);
+} else {
+  bootstrapApp();
+}
