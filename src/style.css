@@ -1987,6 +1987,7 @@ button, [role="button"], a {
 
 /* Card Vazio de Membros no Sheet */
 .empty-members-card {
+  flex-shrink: 0;
   background: rgba(255, 255, 255, 0.03);
   border: 1px dashed rgba(255, 255, 255, 0.16);
   border-radius: var(--radius-card);

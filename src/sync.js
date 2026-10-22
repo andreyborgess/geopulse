@@ -23,60 +23,8 @@ try {
 // Estado inicial de Lugares Salvos (Sem lugares fictícios - apenas criados pelo usuário)
 export const DEFAULT_SAVED_PLACES = [];
 
-// Estado inicial de Membros de Demonstração (apenas caso reset manual seja solicitado)
-export const DEFAULT_DEMO_MEMBERS = [
-  {
-    id: 'member_mariana',
-    name: 'Mariana',
-    relation: 'Esposa',
-    lat: -3.1025,
-    lng: -60.0142,
-    accuracy: 12,
-    speed: 0,
-    heading: 0,
-    battery: 88,
-    charging: false,
-    color: '#EC4899',
-    avatar: 'M',
-    photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-    activity: '🏠 Em Casa',
-    address: 'Adrianópolis, Manaus',
-    updatedAt: Date.now() - 1000 * 60 * 4,
-    version: 1,
-    history: [
-      { lat: -3.1030, lng: -60.0145, time: Date.now() - 1000 * 60 * 30 },
-      { lat: -3.1025, lng: -60.0142, time: Date.now() - 1000 * 60 * 4 },
-    ],
-    isMe: false,
-    isDemo: true,
-  },
-  {
-    id: 'member_lucas',
-    name: 'Lucas',
-    relation: 'Filho',
-    lat: -3.0950,
-    lng: -60.0280,
-    accuracy: 18,
-    speed: 44,
-    heading: 185,
-    battery: 62,
-    charging: false,
-    color: '#007AFF',
-    avatar: 'L',
-    photo: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=150&auto=format&fit=crop&q=80',
-    activity: '🚗 Dirigindo · 44 km/h',
-    address: 'Av. Djalma Batista, Manaus',
-    updatedAt: Date.now() - 1000 * 35,
-    version: 1,
-    history: [
-      { lat: -3.0880, lng: -60.0270, time: Date.now() - 1000 * 60 * 10 },
-      { lat: -3.0920, lng: -60.0275, time: Date.now() - 1000 * 60 * 4 },
-      { lat: -3.0950, lng: -60.0280, time: Date.now() - 1000 * 35 },
-    ],
-    isMe: false,
-    isDemo: true,
-  },
-];
+// Estado inicial de Membros de Demonstração (vazio para permitir que o usuário convide apenas pessoas reais)
+export const DEFAULT_DEMO_MEMBERS = [];
 
 // Gera circle ID aleatório seguro e criptográfico
 export function generateCircleId() {
@@ -224,7 +172,7 @@ export function mergeRemoteMember(remoteUser) {
 
   const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
   const isTraccarPayload = remoteUser.source === 'traccar_background' || cleanId === myTraccarId || cleanId === '93831419';
-  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey'));
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
 
   // Se este aparelho for o iPhone rastreado (Andrey), atualiza a localização do próprio usuário atual e NÃO duplica como membro extra
   if (isTraccarPayload && isThisDeviceTheTraccarDevice) {
@@ -414,12 +362,16 @@ export function initAppState() {
           }
         }
 
-        // Filtra e carrega apenas membros reais externos (outros celulares)
+        // Filtra e carrega apenas membros reais externos (outros celulares convidados)
         parsed.forEach((m) => {
           if (!m || !m.id) return;
           const strId = String(m.id);
           const mName = String(m.name || '').toLowerCase();
           if (
+            m.isDemo ||
+            strId === 'member_mariana' ||
+            strId === 'member_lucas' ||
+            strId.startsWith('demo_') ||
             strId === state.currentUser.id ||
             m.isMe ||
             strId.startsWith('user_') ||
@@ -428,7 +380,7 @@ export function initAppState() {
             mName === 'você' ||
             mName === 'voce'
           ) {
-            return; // NUNCA adiciona o próprio usuário ou fantasmas Você na lista de membros remotos
+            return; // NUNCA adiciona o próprio usuário, pessoas demo ou fantasmas na lista
           }
 
           state.members.set(strId, {
@@ -441,10 +393,13 @@ export function initAppState() {
     } catch (e) {}
   }
 
-  // Remove qualquer membro que tenha o mesmo ID do usuário atual ou seja fantasma 'Você'
+  // Remove qualquer membro fictício ou que tenha o mesmo ID do usuário atual
   state.members.delete(state.currentUser.id);
+  state.members.delete('member_mariana');
+  state.members.delete('member_lucas');
+
   const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
-  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey'));
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
 
   Array.from(state.members.entries()).forEach(([id, m]) => {
     const strId = String(id);
@@ -452,6 +407,10 @@ export function initAppState() {
     if (
       !m ||
       m.isMe ||
+      m.isDemo ||
+      strId === 'member_mariana' ||
+      strId === 'member_lucas' ||
+      strId.startsWith('demo_') ||
       strId === state.currentUser.id ||
       strId.startsWith('user_') ||
       strId.startsWith('gp_') ||
@@ -463,42 +422,6 @@ export function initAppState() {
       state.members.delete(id);
     }
   });
-
-  // Garante SEMPRE a presença dos membros do Círculo Familiar (Mariana e Lucas)
-  DEFAULT_DEMO_MEMBERS.forEach((demoMember) => {
-    if (!state.members.has(demoMember.id) && state.currentUser.id !== demoMember.id) {
-      state.members.set(demoMember.id, {
-        ...demoMember,
-        isMe: false,
-        isOnline: true,
-        updatedAt: Date.now() - 1000 * 60 * 4,
-      });
-    }
-  });
-
-  // Dispositivo Traccar do Andrey (iPhone 24h) - adicionado se este aparelho NÃO for o próprio Andrey
-  if (!isThisDeviceTheTraccarDevice && !state.members.has(myTraccarId) && state.currentUser.id !== myTraccarId) {
-    state.members.set(myTraccarId, {
-      id: myTraccarId,
-      name: 'Andrey (iPhone)',
-      relation: 'Família 👨‍👩‍👧‍👦',
-      role: 'iPhone 24h GPS',
-      lat: -3.1372,
-      lng: -60.0000,
-      accuracy: 10,
-      speed: 0,
-      heading: 0,
-      battery: 65,
-      charging: false,
-      color: '#007AFF',
-      avatar: '📱',
-      photo: '',
-      activity: '📍 Parado (Traccar 24h)',
-      updatedAt: Date.now(),
-      isOnline: true,
-      source: 'traccar_background',
-    });
-  }
 
   // Salva lista limpa de membros reais no storage
   saveMembersToStorage();
@@ -528,12 +451,13 @@ export function initAppState() {
 
 export function saveMembersToStorage() {
   const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
-  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey'));
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
 
   const membersArray = Array.from(state.members.values()).filter((m) => {
     if (!m || !m.id) return false;
     const strId = String(m.id);
     const mName = String(m.name || '').toLowerCase();
+    if (m.isDemo || strId === 'member_mariana' || strId === 'member_lucas' || strId.startsWith('demo_')) return false;
     if (strId === state.currentUser.id || m.isMe) return false;
     if (strId.startsWith('user_') || strId.startsWith('gp_') || strId === 'iphone_traccar') return false;
     if (mName === 'você' || mName === 'voce') return false;

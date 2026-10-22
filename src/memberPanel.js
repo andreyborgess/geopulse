@@ -33,11 +33,12 @@ export function renderMembersList() {
   const container = document.getElementById('members-list');
   if (!container) return;
 
-  // Filtra apenas membros válidos reconhecidos, removendo fantasmas de sessão ou duplicatas
+  // Filtra apenas membros válidos reconhecidos, removendo pessoas fictícias, fantasmas de sessão ou duplicatas
   const validMembers = Array.from(state.members.values()).filter((m) => {
     if (!m || !m.id) return false;
     const strId = String(m.id);
     const mName = String(m.name || '').toLowerCase();
+    if (m.isDemo || strId === 'member_mariana' || strId === 'member_lucas' || strId.startsWith('demo_')) return false;
     if (strId === state.currentUser.id || m.isMe) return false;
     if (strId.startsWith('user_') || strId.startsWith('gp_') || strId === 'iphone_traccar') return false;
     if (mName === 'você' || mName === 'voce') return false;
