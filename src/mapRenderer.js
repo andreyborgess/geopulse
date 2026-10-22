@@ -495,11 +495,20 @@ export function clearActiveRoute() {
 
 export function fitAllMembers() {
   if (!map) return;
-  const allCoords = [
+  const rawCoords = [
     [state.currentUser.lat, state.currentUser.lng],
     ...Array.from(state.members.values()).map((m) => [m.lat, m.lng]),
   ];
-  map.fitBounds(L.latLngBounds(allCoords), { padding: [60, 60], maxZoom: 16 });
+  const validCoords = rawCoords.filter(
+    (c) => typeof c[0] === 'number' && !isNaN(c[0]) && typeof c[1] === 'number' && !isNaN(c[1])
+  );
+
+  if (validCoords.length === 0) return;
+  if (validCoords.length === 1) {
+    map.flyTo(validCoords[0], 16, { duration: 0.8 });
+    return;
+  }
+  map.fitBounds(L.latLngBounds(validCoords), { padding: [60, 60], maxZoom: 16 });
 }
 
 export function flyToUser() {

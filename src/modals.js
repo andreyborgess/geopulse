@@ -1,5 +1,5 @@
 // GeoPulse - Gerenciador Unificado de Modais, Alertas e Compartilhamento E2E
-import { state, updateUserProfile, addSavedPlace, saveUserProfile, isOnboarded } from './sync.js';
+import { state, updateUserProfile, addSavedPlace, saveUserProfile, isOnboarded, getApiBaseUrl } from './sync.js';
 import { playTactileClick, stopFindMyChime } from './audio.js';
 import { generateQRCodeSVG } from './qrcode.js';
 import { getExportedCryptoKey } from './crypto.js';
@@ -179,13 +179,14 @@ export async function openTraccarModal() {
   const idInput = document.getElementById('input-traccar-device-id');
   const isLocalOrCap = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'capacitor:';
   const serverOrigin = isLocalOrCap ? 'https://loc-sigma-mauve.vercel.app' : window.location.origin;
+  const baseUrl = getApiBaseUrl();
 
   const circleId = state.circleId || 'FAMILIA-1';
   const userId = state.currentUser.id || 'me';
   const traccarDeviceId = localStorage.getItem('geopulse_traccar_id') || '93831419';
 
   // Registra automaticamente o vínculo do Traccar ID com este usuário e círculo
-  fetch(`/api/location?bind=1&device=${encodeURIComponent(traccarDeviceId)}&circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&name=${encodeURIComponent(state.currentUser.name)}`).catch(() => {});
+  fetch(`${baseUrl}/api/location?bind=1&device=${encodeURIComponent(traccarDeviceId)}&circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&name=${encodeURIComponent(state.currentUser.name)}`).catch(() => {});
 
   if (urlInput) {
     urlInput.value = `${serverOrigin}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`;
@@ -208,15 +209,16 @@ export async function checkTraccarSignalStatus(circleId, userId, traccarId = '93
   const dot = document.getElementById('traccar-status-dot');
   const title = document.getElementById('traccar-status-title');
   const meta = document.getElementById('traccar-status-meta');
+  const baseUrl = getApiBaseUrl();
 
   if (title) title.textContent = 'Verificando sinal no servidor...';
 
   try {
-    let res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`);
+    let res = await fetch(`${baseUrl}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}`);
     let data = await res.json();
 
     if (!data.lastPing && traccarId) {
-      const altRes = await fetch(`/api/location?circle=FAMILIA-1&user=${encodeURIComponent(traccarId)}`);
+      const altRes = await fetch(`${baseUrl}/api/location?circle=FAMILIA-1&user=${encodeURIComponent(traccarId)}`);
       const altData = await altRes.json();
       if (altData.lastPing) data = altData;
     }
@@ -679,8 +681,9 @@ export function initModals() {
     const lon = state.currentUser.lng || -46.633308;
     const batt = state.currentUser.battery || 95;
 
+    const baseUrl = getApiBaseUrl();
     try {
-      const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&lat=${lat}&lon=${lon}&batt=${batt}&speed=10`);
+      const res = await fetch(`${baseUrl}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&lat=${lat}&lon=${lon}&batt=${batt}&speed=10`);
       const data = await res.json();
       if (data.status === 'ok') {
         showToast('Sinal de teste recebido e publicado com sucesso no círculo!', 'info');
@@ -1004,6 +1007,10 @@ export function initModals() {
     }},
     { id: 'modal-onboarding', close: () => {
       const m = document.getElementById('modal-onboarding');
+      if (m) m.style.display = 'none';
+    }},
+    { id: 'modal-chat', close: () => {
+      const m = document.getElementById('modal-chat');
       if (m) m.style.display = 'none';
     }},
   ];

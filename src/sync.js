@@ -95,18 +95,25 @@ function resolveCircleId() {
     }
   }
   // 2. Fallback: valor salvo no localStorage (se não for antigo legado isolado)
-  const saved = localStorage.getItem('geopulse_circle_id');
+  const saved = typeof localStorage !== 'undefined' ? localStorage.getItem('geopulse_circle_id') : null;
   if (saved && saved !== 'FAMILIA-01' && !saved.startsWith('gp_sec_')) return saved;
   // 3. Padrão Familiar Unificado (compatível direto com Traccar Client & Webhook)
   const defaultCircle = 'FAMILIA-1';
-  localStorage.setItem('geopulse_circle_id', defaultCircle);
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem('geopulse_circle_id', defaultCircle);
+  }
   return defaultCircle;
 }
 
-let initialCircleName = localStorage.getItem('geopulse_circle_name');
+const safeStorage = {
+  getItem: (k) => (typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null),
+  setItem: (k, v) => { if (typeof localStorage !== 'undefined') localStorage.setItem(k, v); },
+};
+
+let initialCircleName = safeStorage.getItem('geopulse_circle_name');
 if (!initialCircleName || initialCircleName === 'Família Silva' || initialCircleName === 'Família') {
   initialCircleName = 'Família 👨‍👩‍👧‍👦';
-  localStorage.setItem('geopulse_circle_name', initialCircleName);
+  safeStorage.setItem('geopulse_circle_name', initialCircleName);
 }
 
 // Estado dos membros do círculo — circleId resolvido uma única vez, com prioridade para URL de convite
@@ -114,8 +121,8 @@ export const state = {
   circleId: resolveCircleId(),
   circleName: initialCircleName,
   currentUser: {
-    id: localStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).slice(2, 8)}`,
-    name: localStorage.getItem('geopulse_user_name') || 'Você',
+    id: safeStorage.getItem('geopulse_user_id') || `user_${Math.random().toString(36).slice(2, 8)}`,
+    name: safeStorage.getItem('geopulse_user_name') || 'Você',
     relation: 'Organizador',
     role: 'Administrador',
     lat: -3.1303, // Manaus, Amazonas (Teatro Amazonas / Centro)
@@ -123,14 +130,14 @@ export const state = {
     accuracy: 10,
     speed: 0,
     heading: 0,
-    battery: parseInt(localStorage.getItem('geopulse_user_battery') || '85', 10),
+    battery: parseInt(safeStorage.getItem('geopulse_user_battery') || '85', 10),
     charging: false,
     updatedAt: Date.now(),
     version: 1,
     history: [],
-    color: localStorage.getItem('geopulse_user_color') || '#007AFF', // Azul Real Apple
-    avatar: localStorage.getItem('geopulse_user_avatar') || 'VC',
-    photo: localStorage.getItem('geopulse_user_photo') || '',
+    color: safeStorage.getItem('geopulse_user_color') || '#007AFF', // Azul Real Apple
+    avatar: safeStorage.getItem('geopulse_user_avatar') || 'VC',
+    photo: safeStorage.getItem('geopulse_user_photo') || '',
     activity: '📍 Parado',
     address: 'Centro, Manaus',
     isMe: true,
@@ -180,6 +187,17 @@ export function saveUserProfile({ name, relation, color, photo, avatar }) {
 }
 
 /**
+ * Retorna a URL base do backend (em Capacitor nativo usa Vercel; no browser usa relativo)
+ */
+export function getApiBaseUrl() {
+  if (typeof window === 'undefined') return 'https://loc-sigma-mauve.vercel.app';
+  const isCapacitor =
+    window.location.protocol === 'capacitor:' ||
+    (window.location.hostname === 'localhost' && !window.location.port);
+  return isCapacitor ? 'https://loc-sigma-mauve.vercel.app' : '';
+}
+
+/**
  * Merge com algoritmo Last-Write-Wins (LWW) para Membros
  * Retorna true se houver alteração
  */
@@ -195,9 +213,10 @@ export function mergeRemoteMember(remoteUser) {
 
   const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
   const isTraccarPayload = remoteUser.source === 'traccar_background' || remoteUser.id === myTraccarId || remoteUser.id === '93831419';
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId;
 
-  // Se este aparelho for o iPhone rastreado, sincroniza a posição do usuário atual
-  if (isTraccarPayload && (typeof localStorage === 'undefined' || localStorage.getItem('geopulse_is_traccar_device') !== 'false')) {
+  // Se este aparelho for explicitamente configurado como o iPhone rastreado, sincroniza a posição do usuário atual
+  if (isTraccarPayload && isThisDeviceTheTraccarDevice) {
     state.currentUser.lat = remoteUser.lat;
     state.currentUser.lng = remoteUser.lng;
     if (remoteUser.accuracy) state.currentUser.accuracy = remoteUser.accuracy;
@@ -247,9 +266,10 @@ export function mergeRemoteMember(remoteUser) {
 export async function syncTraccarLocation() {
   const circleId = state.circleId || 'FAMILIA-1';
   const traccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const baseUrl = getApiBaseUrl();
 
   try {
-    const res = await fetch(`/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(traccarId)}`);
+    const res = await fetch(`${baseUrl}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(traccarId)}`);
     if (!res.ok) return null;
     const data = await res.json();
     let updatedAny = false;

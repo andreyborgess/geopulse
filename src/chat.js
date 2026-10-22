@@ -95,6 +95,10 @@ function renderThreadSelector() {
 
   const members = Array.from(state.members.values());
 
+  if (activeChatThread !== 'all' && !state.members.has(activeChatThread)) {
+    activeChatThread = 'all';
+  }
+
   let html = `
     <button type="button" class="chat-tab-pill ${activeChatThread === 'all' ? 'active' : ''}" data-thread="all">
       <span class="tab-pill-icon">👨‍👩‍👧‍👦</span>
@@ -105,9 +109,12 @@ function renderThreadSelector() {
   members.forEach((m) => {
     const isSelected = activeChatThread === m.id;
     const initial = m.avatar || m.name.slice(0, 2).toUpperCase();
+    const avatarStyle = m.photo
+      ? `background-image: url('${m.photo}'); background-color: ${m.color || '#007AFF'};`
+      : `background-color: ${m.color || '#007AFF'};`;
     html += `
       <button type="button" class="chat-tab-pill ${isSelected ? 'active' : ''}" data-thread="${m.id}">
-        <span class="tab-pill-avatar" style="background-color: ${m.color || '#007AFF'};">${initial}</span>
+        <span class="tab-pill-avatar" style="${avatarStyle}">${m.photo ? '' : initial}</span>
         <span>${m.name}</span>
       </button>
     `;
@@ -287,7 +294,9 @@ export function handleIncomingChatMessage(payload) {
 function scrollToBottom() {
   const container = document.getElementById('chat-messages-container');
   if (container) {
-    container.scrollTop = container.scrollHeight;
+    requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
   }
 }
 

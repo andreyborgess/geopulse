@@ -173,10 +173,14 @@ export function startGeolocationTracking() {
   });
 }
 
+let isCompassListenerAttached = false;
+
 /**
  * Orientação e Bússola do Dispositivo (Sensor de Giroscópio/Magnetômetro)
  */
-export function setupCompassListener() {
+export function setupCompassListener(forceAttach = false) {
+  if (isCompassListenerAttached && !forceAttach) return;
+
   const needleSvg = document.getElementById('compass-needle-svg');
 
   const handleOrientation = (e) => {
@@ -196,10 +200,13 @@ export function setupCompassListener() {
     }
   };
 
-  if (window.DeviceOrientationEvent) {
-    if (typeof DeviceOrientationEvent.requestPermission !== 'function') {
+  if (typeof window !== 'undefined' && window.DeviceOrientationEvent) {
+    if (forceAttach || typeof DeviceOrientationEvent.requestPermission !== 'function') {
+      window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.removeEventListener('deviceorientation', handleOrientation, true);
       window.addEventListener('deviceorientationabsolute', handleOrientation, true);
       window.addEventListener('deviceorientation', handleOrientation, true);
+      isCompassListenerAttached = true;
     }
   }
 }

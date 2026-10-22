@@ -5,6 +5,12 @@ export default defineConfig({
   server: {
     host: true,
     allowedHosts: true,
+    proxy: {
+      '/api': {
+        target: 'https://loc-sigma-mauve.vercel.app',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     chunkSizeWarningLimit: 1200,

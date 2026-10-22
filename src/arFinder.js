@@ -225,8 +225,9 @@ function startARLoop() {
     // Delta relativo: para onde o usuário deve virar (-180° a +180°)
     let delta = (bearing - currentHeading + 540) % 360 - 180;
 
-    // Suavização exponencial para eliminar jitter da mão
-    smoothedDelta = smoothedDelta * 0.75 + delta * 0.25;
+    // Suavização angular pelo menor arco para eliminar jitter e evitar giro de 360°
+    const angleDiff = ((delta - smoothedDelta + 540) % 360) - 180;
+    smoothedDelta = ((smoothedDelta + angleDiff * 0.25 + 540) % 360) - 180;
 
     // Rotação da seta 3D no centro da tela
     if (arrowEl) {

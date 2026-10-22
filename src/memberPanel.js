@@ -268,9 +268,32 @@ export function openMemberDetailSheet(member) {
     avatarEl.style.backgroundColor = member.color || '#007AFF';
   }
 
+  const detailDot = document.getElementById('detail-dot');
+  const activityIcon = document.getElementById('detail-activity-icon');
+
+  const elapsedMs = Date.now() - (member.updatedAt || 0);
+  const onlineThreshold = member.source === 'traccar_background' ? 1000 * 60 * 30 : 1000 * 60 * 15;
+  const isOnline = member.isOnline !== false && elapsedMs < onlineThreshold;
+  if (detailDot) {
+    detailDot.className = `member-sheet-status-dot ${isOnline ? 'online' : 'offline'}`;
+    detailDot.title = isOnline ? 'Online' : 'Offline';
+  }
+
+  if (activityIcon) {
+    let icon = '📍';
+    if (member.activity) {
+      if (member.activity.includes('🏠')) icon = '🏠';
+      else if (member.activity.includes('🚗') || (member.speed && member.speed > 20)) icon = '🚗';
+      else if (member.activity.includes('🚶') || (member.speed && member.speed > 3)) icon = '🚶';
+      else if (member.activity.includes('💚')) icon = '💚';
+      else if (member.activity.includes('📱')) icon = '📱';
+    }
+    activityIcon.textContent = icon;
+  }
+
   if (nameEl) nameEl.textContent = member.name;
   if (relationEl) relationEl.textContent = member.relation || 'Família 👨‍👩‍👧‍👦';
-  if (activityText) activityText.textContent = member.activity || '📍 Parado';
+  if (activityText) activityText.textContent = member.activity || (isOnline ? '📍 Parado' : 'Offline · Desconectado');
   if (addressEl) addressEl.textContent = member.address || 'Localização em tempo real';
   if (speedEl) speedEl.textContent = `${member.speed || 0} km/h`;
 

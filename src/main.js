@@ -358,7 +358,7 @@ function setupMapControls() {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       try {
         const res = await DeviceOrientationEvent.requestPermission();
-        if (res === 'granted') setupCompassListener();
+        if (res === 'granted') setupCompassListener(true);
       } catch (e) {}
     }
 
@@ -629,6 +629,7 @@ async function bootstrapApp() {
 
   try {
     startGeolocationTracking();
+    setupCompassListener(false);
   } catch (err) {
     console.warn('[Bootstrap] Geolocation error:', err);
   }
