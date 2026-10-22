@@ -134,7 +134,10 @@ export default async function handler(req, res) {
     const circlePings = [];
     for (const [key, ping] of recentPings.entries()) {
       if (ping && (ping.circleId === circleId || key.startsWith(`${circleId}:`))) {
-        circlePings.push(ping);
+        // Filtra para manter apenas dispositivos reais do círculo (ex: 93831419), nunca IDs de sessão web temporários
+        if (ping.userId && !ping.userId.startsWith('user_') && ping.userId !== 'iphone_traccar') {
+          circlePings.push(ping);
+        }
       }
     }
     const last = recentPings.get(cacheKey) || recentPings.get(`FAMILIA-1:${userId}`) || recentPings.get('FAMILIA-1:93831419');
@@ -192,10 +195,13 @@ export default async function handler(req, res) {
     }
   }
 
-  // Atualiza cache em memória
+  const devName = body.name || query.name || (userId === '93831419' ? 'Andrey (iPhone)' : 'iPhone Família');
+
+  // Atualiza cache em memória apenas para aparelhos permanentes (evita poluir com IDs de sessão)
   const pingData = {
     circleId,
     userId,
+    userName: devName,
     lat,
     lng,
     speed: Math.round(speedKmH),
@@ -206,7 +212,9 @@ export default async function handler(req, res) {
     updatedAt: timestamp,
     receivedAt: Date.now(),
   };
-  recentPings.set(cacheKey, pingData);
+  if (!userId.startsWith('user_')) {
+    recentPings.set(cacheKey, pingData);
+  }
 
   // Monta objeto de payload de membro compatível com o GeoPulse
   const activity = speedKmH > 22 ? '🚗 Em trânsito' : (speedKmH > 3 ? '🚶 Caminhando' : '📍 Parado');
@@ -215,7 +223,7 @@ export default async function handler(req, res) {
     type: 'LOCATION',
     user: {
       id: userId,
-      name: body.name || query.name || 'Você (iPhone)',
+      name: devName,
       lat,
       lng,
       accuracy,

@@ -33,28 +33,50 @@ export function renderMembersList() {
   const container = document.getElementById('members-list');
   if (!container) return;
 
+  // Filtra apenas membros válidos reconhecidos, removendo fantasmas de sessão ou duplicatas
+  const validMembers = Array.from(state.members.values()).filter((m) => {
+    if (!m || !m.id) return false;
+    const strId = String(m.id);
+    const mName = String(m.name || '').toLowerCase();
+    if (strId === state.currentUser.id || m.isMe) return false;
+    if (strId.startsWith('user_') || strId.startsWith('gp_') || strId === 'iphone_traccar') return false;
+    if (mName === 'você' || mName === 'voce') return false;
+    return true;
+  });
+
+  const allMembers = [state.currentUser, ...validMembers];
+  const totalCount = allMembers.length;
+
   const countBadge = document.getElementById('header-member-count');
   const tabBadge = document.getElementById('tab-badge-people');
-  const totalCount = 1 + state.members.size;
 
   if (countBadge) countBadge.textContent = totalCount;
   if (tabBadge) tabBadge.textContent = totalCount;
 
-  const allMembers = [state.currentUser, ...Array.from(state.members.values())];
+  try {
+    const membersCardsHtml = allMembers
+      .map((member) => {
+        if (!member) return '';
+        const isMe = !!member.isMe || member.id === state.currentUser.id;
+        const rawName = (member.name ? String(member.name).trim() : '') || (isMe ? 'Você' : 'Membro Familiar');
+        const avatarText = member.avatar || (rawName ? rawName.slice(0, 2).toUpperCase() : (isMe ? 'VC' : 'MB'));
+        const color = member.color || (isMe ? '#007AFF' : '#EC4899');
+        const photo = member.photo || '';
+        const avatarStyle = photo
+          ? `background-image: url('${photo}'); background-color: ${color};`
+          : `background-color: ${color};`;
 
-  const membersCardsHtml = allMembers
-    .map((member) => {
-      const isMe = !!member.isMe || member.id === state.currentUser.id;
-      const avatarText = member.avatar || member.name.slice(0, 2).toUpperCase();
-      const color = member.color || (isMe ? '#007AFF' : '#EC4899');
-      const photo = member.photo || '';
-      const avatarStyle = photo
-        ? `background-image: url('${photo}'); background-color: ${color};`
-        : `background-color: ${color};`;
-
-      const dist = isMe
-        ? ''
-        : formatDistance(
+        let dist = '';
+        if (
+          !isMe &&
+          typeof member.lat === 'number' &&
+          typeof member.lng === 'number' &&
+          typeof state.currentUser.lat === 'number' &&
+          typeof state.currentUser.lng === 'number' &&
+          !isNaN(member.lat) &&
+          !isNaN(member.lng)
+        ) {
+          dist = formatDistance(
             calculateDistance(
               state.currentUser.lat,
               state.currentUser.lng,
@@ -62,72 +84,81 @@ export function renderMembersList() {
               member.lng
             )
           );
-
-      const elapsedMs = Date.now() - (member.updatedAt || 0);
-      const onlineThreshold = member.source === 'traccar_background' ? 1000 * 60 * 30 : 1000 * 60 * 15;
-      const isOnline = isMe || (member.isOnline !== false && elapsedMs < onlineThreshold);
-      const dotClass = isOnline ? 'online' : 'offline';
-      const displayName = isMe ? `${member.name} (Você)` : member.name;
-      const relationText = isMe
-        ? member.role === 'Administrador'
-          ? 'Organizador do Círculo'
-          : 'Seu Aparelho'
-        : member.relation || 'Membro do Círculo';
-
-      let activityText = member.activity || relationText;
-      if (isMe) {
-        activityText = member.activity || relationText;
-      } else if (!isOnline) {
-        const mins = Math.floor(elapsedMs / (1000 * 60));
-        if (mins < 1) activityText = 'Offline · Desconectado';
-        else if (mins < 60) activityText = `Offline · Visto há ${mins}m`;
-        else {
-          const hours = Math.floor(mins / 60);
-          activityText = `Offline · Visto há ${hours}h`;
         }
-      }
 
-      return `
-        <div class="member-card ${state.selectedMemberId === member.id ? 'active-selected' : ''}" data-id="${member.id}">
-          <div class="card-avatar-wrapper">
-            <div class="card-avatar" style="${avatarStyle}">
-              ${photo ? '' : avatarText}
+        const elapsedMs = Date.now() - (member.updatedAt || 0);
+        const onlineThreshold = member.source === 'traccar_background' ? 1000 * 60 * 30 : 1000 * 60 * 15;
+        const isOnline = isMe || (member.isOnline !== false && elapsedMs < onlineThreshold);
+        const dotClass = isOnline ? 'online' : 'offline';
+
+        let displayName = rawName;
+        if (isMe) {
+          displayName = rawName.toLowerCase() === 'você' ? 'Você' : `${rawName} (Você)`;
+        }
+
+        const relationText = isMe
+          ? member.role === 'Administrador'
+            ? 'Organizador do Círculo'
+            : 'Seu Aparelho'
+          : member.relation || 'Membro do Círculo';
+
+        let activityText = member.activity || relationText;
+        if (isMe) {
+          activityText = member.activity || relationText;
+        } else if (!isOnline) {
+          const mins = Math.floor(elapsedMs / (1000 * 60));
+          if (mins < 1) activityText = 'Offline · Desconectado';
+          else if (mins < 60) activityText = `Offline · Visto há ${mins}m`;
+          else {
+            const hours = Math.floor(mins / 60);
+            activityText = `Offline · Visto há ${hours}h`;
+          }
+        }
+
+        return `
+          <div class="member-card ${state.selectedMemberId === member.id ? 'active-selected' : ''}" data-id="${member.id}">
+            <div class="card-avatar-wrapper">
+              <div class="card-avatar" style="${avatarStyle}">
+                ${photo ? '' : avatarText}
+              </div>
+              <span class="card-avatar-dot ${dotClass}" title="${isOnline ? 'Online' : 'Offline'}"></span>
             </div>
-            <span class="card-avatar-dot ${dotClass}" title="${isOnline ? 'Online' : 'Offline'}"></span>
+            <div class="card-info">
+              <div class="card-name-row">
+                <strong class="card-name">${displayName}</strong>
+                ${dist ? `<span class="card-distance">${dist}</span>` : ''}
+              </div>
+              <div class="card-activity-row">
+                <span class="card-activity">${activityText}</span>
+              </div>
+            </div>
           </div>
-          <div class="card-info">
-            <div class="card-name-row">
-              <strong class="card-name">${displayName}</strong>
-              ${dist ? `<span class="card-distance">${dist}</span>` : ''}
-            </div>
-            <div class="card-activity-row">
-              <span class="card-activity">${activityText}</span>
-            </div>
-          </div>
+        `;
+      })
+      .join('');
+
+    const emptyCardHtml =
+      validMembers.length === 0
+        ? `
+      <div class="empty-members-card" id="card-empty-invite" title="Conectar outro celular">
+        <div class="empty-members-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+            <line x1="12" y1="5" x2="12" y2="19"></line>
+            <line x1="5" y1="12" x2="19" y2="12"></line>
+          </svg>
         </div>
-      `;
-    })
-    .join('');
-
-  const emptyCardHtml =
-    state.members.size === 0
-      ? `
-    <div class="empty-members-card" id="card-empty-invite" title="Conectar outro celular">
-      <div class="empty-members-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
-          <line x1="12" y1="5" x2="12" y2="19"></line>
-          <line x1="5" y1="12" x2="19" y2="12"></line>
-        </svg>
+        <div class="empty-members-text">
+          <strong>Conectar Novo Aparelho</strong>
+          <span>Toque para gerar o QR Code e conectar o celular da família em tempo real.</span>
+        </div>
       </div>
-      <div class="empty-members-text">
-        <strong>Conectar Novo Aparelho</strong>
-        <span>Toque para gerar o QR Code e conectar o celular da família em tempo real.</span>
-      </div>
-    </div>
-  `
-      : '';
+    `
+        : '';
 
-  container.innerHTML = membersCardsHtml + emptyCardHtml;
+    container.innerHTML = membersCardsHtml + emptyCardHtml;
+  } catch (err) {
+    console.error('[MemberPanel] Erro ao renderizar cartões:', err);
+  }
 
   document.getElementById('card-empty-invite')?.addEventListener('click', () => {
     playTactileClick();

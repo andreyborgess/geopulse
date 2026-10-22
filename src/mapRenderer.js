@@ -205,9 +205,10 @@ export function updateUserHeadingCone(heading) {
 }
 
 export function createMemberMarkerIcon(member) {
-  const isMe = member.isMe;
+  const isMe = !!member.isMe || member.id === state.currentUser.id;
   const color = member.color || (isMe ? '#007AFF' : '#EC4899');
-  const avatarText = member.avatar || member.name.slice(0, 2).toUpperCase();
+  const rawName = (member.name ? String(member.name).trim() : '') || (isMe ? 'Você' : 'Membro');
+  const avatarText = member.avatar || (rawName ? rawName.slice(0, 2).toUpperCase() : (isMe ? 'VC' : 'MB'));
   const photoUrl = member.photo || '';
   const speed = member.speed ? Math.round(member.speed) : 0;
   const isMoving = speed > 3;
@@ -254,6 +255,10 @@ export function createMemberMarkerIcon(member) {
     ? `background-image: url('${photoUrl}'); background-color: ${color};`
     : `background-color: ${color};`;
 
+  const tagLabel = isMe
+    ? (rawName.toLowerCase() === 'você' ? 'Você' : `${rawName} (Você)`)
+    : rawName;
+
   const html = `
     <div class="apple-map-marker ${isMe ? 'is-me' : ''} ${isSOS ? 'is-sos' : ''}">
       ${coneHtml}
@@ -264,7 +269,7 @@ export function createMemberMarkerIcon(member) {
       </div>
       ${badgeHtml}
       <div class="marker-label-tag">
-        ${member.name}
+        ${tagLabel}
       </div>
     </div>
   `;
@@ -358,6 +363,18 @@ export function removeMarker(memberId) {
 }
 
 export function updateAllMarkers() {
+  const activeIds = new Set([state.currentUser.id]);
+  state.members.forEach((member) => {
+    if (member && member.id) activeIds.add(String(member.id));
+  });
+
+  // Remove do Leaflet qualquer marcador órfão que não pertença mais ao círculo
+  Array.from(markersMap.keys()).forEach((mId) => {
+    if (!activeIds.has(mId)) {
+      removeMarker(mId);
+    }
+  });
+
   updateMarkerForMember(state.currentUser);
   state.members.forEach((member) => {
     updateMarkerForMember(member);

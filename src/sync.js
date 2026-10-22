@@ -206,16 +206,27 @@ export function mergeRemoteMember(remoteUser) {
     return false;
   }
 
-  // Se for uma mensagem ecoada do próprio ID de sessão web ou fantasma não-identificado "Você"
-  if (remoteUser.id === state.currentUser.id || (remoteUser.name === 'Você' && remoteUser.id.startsWith('user_'))) {
+  const cleanId = String(remoteUser.id).trim();
+  const cleanName = String(remoteUser.name || '').trim();
+  const lowerName = cleanName.toLowerCase();
+
+  // Rejeita IDs de sessão temporária web ('user_...'), IDs de teste, eco do usuário atual ou nomes 'Você'
+  if (
+    cleanId === state.currentUser.id ||
+    cleanId.startsWith('user_') ||
+    cleanId.startsWith('gp_') ||
+    cleanId === 'iphone_traccar' ||
+    lowerName === 'você' ||
+    lowerName === 'voce'
+  ) {
     return false;
   }
 
   const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
-  const isTraccarPayload = remoteUser.source === 'traccar_background' || remoteUser.id === myTraccarId || remoteUser.id === '93831419';
-  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId;
+  const isTraccarPayload = remoteUser.source === 'traccar_background' || cleanId === myTraccarId || cleanId === '93831419';
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey'));
 
-  // Se este aparelho for explicitamente configurado como o iPhone rastreado, sincroniza a posição do usuário atual
+  // Se este aparelho for o iPhone rastreado (Andrey), atualiza a localização do próprio usuário atual e NÃO duplica como membro extra
   if (isTraccarPayload && isThisDeviceTheTraccarDevice) {
     state.currentUser.lat = remoteUser.lat;
     state.currentUser.lng = remoteUser.lng;
@@ -225,17 +236,25 @@ export function mergeRemoteMember(remoteUser) {
     if (remoteUser.battery !== undefined) state.currentUser.battery = remoteUser.battery;
     if (remoteUser.activity) state.currentUser.activity = remoteUser.activity;
     state.currentUser.updatedAt = remoteUser.updatedAt || Date.now();
+    // Remove do mapa de membros remotos para não criar 2 marcadores empilhados para o Andrey
+    if (state.members.has(cleanId)) {
+      state.members.delete(cleanId);
+      saveMembersToStorage();
+    }
+    return true;
   }
 
-  const existing = state.members.get(remoteUser.id);
+  const existing = state.members.get(cleanId);
   const remoteTime = remoteUser.updatedAt || 0;
   const existingTime = existing?.updatedAt || 0;
 
   // LWW: Atualiza se for novo ou se o timestamp remoto for mais recente ou igual
   if (!existing || remoteTime >= existingTime) {
-    state.members.set(remoteUser.id, {
+    state.members.set(cleanId, {
       ...existing,
       ...remoteUser,
+      id: cleanId,
+      name: cleanName || existing?.name || 'Membro Familiar',
       isMe: false,
       isOnline: remoteUser.isOnline !== false,
       lastSeen: Date.now(),
@@ -272,71 +291,36 @@ export async function syncTraccarLocation() {
     const res = await fetch(`${baseUrl}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(traccarId)}`);
     if (!res.ok) return null;
     const data = await res.json();
-    let updatedAny = false;
-    let mainRemoteUser = null;
 
-    if (data && Array.isArray(data.allPings) && data.allPings.length > 0) {
-      data.allPings.forEach((p) => {
-        if (!p || !p.lat || !p.lng) return;
-        const sKmH = p.speed || 0;
-        const act = sKmH > 22 ? '🚗 Em trânsito' : (sKmH > 3 ? '🚶 Caminhando' : '📍 Parado');
-        const pId = p.userId || traccarId;
-        const pUser = {
-          id: pId,
-          name: p.userName || (pId === traccarId ? 'Andrey (iPhone)' : `iPhone Família (${pId.slice(-4)})`),
-          relation: 'Família 👨‍👩‍👧‍👦',
-          role: 'iPhone 24h GPS',
-          lat: p.lat,
-          lng: p.lng,
-          accuracy: p.accuracy || 10,
-          speed: sKmH,
-          heading: p.heading || 0,
-          battery: p.battery !== undefined ? p.battery : 85,
-          charging: !!p.charging,
-          activity: act,
-          color: pId === traccarId ? '#007AFF' : '#34C759',
-          avatar: '📱',
-          updatedAt: p.updatedAt || Date.now(),
-          isOnline: (Date.now() - (p.updatedAt || 0)) < 1000 * 60 * 30,
-          source: 'traccar_background',
-        };
-        const c = mergeRemoteMember(pUser);
-        if (c) updatedAny = true;
-        if (pId === traccarId) mainRemoteUser = pUser;
-      });
-    }
+    // Prioriza o ping do dispositivo oficial Traccar (93831419)
+    const targetPing = data.lastPing || (Array.isArray(data.allPings) ? data.allPings.find(p => p && String(p.userId) === traccarId) : null);
 
-    if (data && data.lastPing && data.lastPing.lat && data.lastPing.lng) {
-      const ping = data.lastPing;
-      const speedKmH = ping.speed || 0;
+    if (targetPing && targetPing.lat && targetPing.lng) {
+      const speedKmH = targetPing.speed || 0;
       const activity = speedKmH > 22 ? '🚗 Em trânsito' : (speedKmH > 3 ? '🚶 Caminhando' : '📍 Parado');
 
       const remoteUser = {
-        id: ping.userId || traccarId,
-        name: ping.userName || 'Andrey (iPhone)',
+        id: String(targetPing.userId || traccarId),
+        name: targetPing.userName || 'Andrey (iPhone)',
         relation: 'Família 👨‍👩‍👧‍👦',
         role: 'iPhone 24h GPS',
-        lat: ping.lat,
-        lng: ping.lng,
-        accuracy: ping.accuracy || 10,
+        lat: targetPing.lat,
+        lng: targetPing.lng,
+        accuracy: targetPing.accuracy || 10,
         speed: speedKmH,
-        heading: ping.heading || 0,
-        battery: ping.battery !== undefined ? ping.battery : 85,
-        charging: !!ping.charging,
+        heading: targetPing.heading || 0,
+        battery: targetPing.battery !== undefined ? targetPing.battery : 85,
+        charging: !!targetPing.charging,
         activity,
         color: '#007AFF',
         avatar: '📱',
-        updatedAt: ping.updatedAt || Date.now(),
-        isOnline: (Date.now() - (ping.updatedAt || 0)) < 1000 * 60 * 30,
+        updatedAt: targetPing.updatedAt || Date.now(),
+        isOnline: (Date.now() - (targetPing.updatedAt || 0)) < 1000 * 60 * 30,
         source: 'traccar_background',
       };
 
       const changed = mergeRemoteMember(remoteUser);
-      return { changed: changed || updatedAny, remoteUser: mainRemoteUser || remoteUser };
-    }
-
-    if (mainRemoteUser) {
-      return { changed: updatedAny, remoteUser: mainRemoteUser };
+      return { changed, remoteUser };
     }
   } catch (e) {
     // offline ou erro silencioso
@@ -432,12 +416,24 @@ export function initAppState() {
 
         // Filtra e carrega apenas membros reais externos (outros celulares)
         parsed.forEach((m) => {
-          if (!m || !m.id || m.id === state.currentUser.id || m.isMe || (m.name === 'Você' && m.id.startsWith('user_'))) {
+          if (!m || !m.id) return;
+          const strId = String(m.id);
+          const mName = String(m.name || '').toLowerCase();
+          if (
+            strId === state.currentUser.id ||
+            m.isMe ||
+            strId.startsWith('user_') ||
+            strId.startsWith('gp_') ||
+            strId === 'iphone_traccar' ||
+            mName === 'você' ||
+            mName === 'voce'
+          ) {
             return; // NUNCA adiciona o próprio usuário ou fantasmas Você na lista de membros remotos
           }
 
-          state.members.set(m.id, {
+          state.members.set(strId, {
             ...m,
+            id: strId,
             isMe: false,
           });
         });
@@ -447,13 +443,28 @@ export function initAppState() {
 
   // Remove qualquer membro que tenha o mesmo ID do usuário atual ou seja fantasma 'Você'
   state.members.delete(state.currentUser.id);
+  const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey'));
+
   Array.from(state.members.entries()).forEach(([id, m]) => {
-    if (m.isMe || id === state.currentUser.id || (m.name === 'Você' && id.startsWith('user_'))) {
+    const strId = String(id);
+    const mName = String(m?.name || '').toLowerCase();
+    if (
+      !m ||
+      m.isMe ||
+      strId === state.currentUser.id ||
+      strId.startsWith('user_') ||
+      strId.startsWith('gp_') ||
+      strId === 'iphone_traccar' ||
+      mName.includes('você') ||
+      mName.includes('voce') ||
+      (isThisDeviceTheTraccarDevice && strId === myTraccarId)
+    ) {
       state.members.delete(id);
     }
   });
 
-  // Garante a presença dos membros do Círculo Familiar (Mariana e Lucas)
+  // Garante SEMPRE a presença dos membros do Círculo Familiar (Mariana e Lucas)
   DEFAULT_DEMO_MEMBERS.forEach((demoMember) => {
     if (!state.members.has(demoMember.id) && state.currentUser.id !== demoMember.id) {
       state.members.set(demoMember.id, {
@@ -465,11 +476,10 @@ export function initAppState() {
     }
   });
 
-  // Dispositivo Traccar do Andrey (iPhone 24h) - garantido no círculo para visualização imediata
-  const traccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
-  if (!state.members.has(traccarId) && state.currentUser.id !== traccarId) {
-    state.members.set(traccarId, {
-      id: traccarId,
+  // Dispositivo Traccar do Andrey (iPhone 24h) - adicionado se este aparelho NÃO for o próprio Andrey
+  if (!isThisDeviceTheTraccarDevice && !state.members.has(myTraccarId) && state.currentUser.id !== myTraccarId) {
+    state.members.set(myTraccarId, {
+      id: myTraccarId,
       name: 'Andrey (iPhone)',
       relation: 'Família 👨‍👩‍👧‍👦',
       role: 'iPhone 24h GPS',
@@ -480,7 +490,7 @@ export function initAppState() {
       heading: 0,
       battery: 65,
       charging: false,
-      color: '#34C759',
+      color: '#007AFF',
       avatar: '📱',
       photo: '',
       activity: '📍 Parado (Traccar 24h)',
@@ -517,13 +527,23 @@ export function initAppState() {
 }
 
 export function saveMembersToStorage() {
-  const membersArray = Array.from(state.members.values()).filter(
-    (m) =>
-      !m.isMe &&
-      m.id !== state.currentUser.id &&
-      !(m.name === 'Você' && m.id.startsWith('user_'))
-  );
-  localStorage.setItem('geopulse_members_data', JSON.stringify(membersArray));
+  const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey'));
+
+  const membersArray = Array.from(state.members.values()).filter((m) => {
+    if (!m || !m.id) return false;
+    const strId = String(m.id);
+    const mName = String(m.name || '').toLowerCase();
+    if (strId === state.currentUser.id || m.isMe) return false;
+    if (strId.startsWith('user_') || strId.startsWith('gp_') || strId === 'iphone_traccar') return false;
+    if (mName === 'você' || mName === 'voce') return false;
+    if (isThisDeviceTheTraccarDevice && strId === myTraccarId) return false;
+    return true;
+  });
+
+  try {
+    localStorage.setItem('geopulse_members_data', JSON.stringify(membersArray));
+  } catch (e) {}
 }
 
 export function savePlacesToStorage() {
