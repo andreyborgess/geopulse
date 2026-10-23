@@ -677,13 +677,14 @@ export function initModals() {
     showToast('Enviando sinal de teste para simular o Traccar...', 'info');
     const circleId = state.circleId || 'FAMILIA-1';
     const userId = state.currentUser.id || 'me';
-    const lat = state.currentUser.lat || -23.55052;
-    const lon = state.currentUser.lng || -46.633308;
+    const lat = state.currentUser.lat || -3.1303;
+    const lon = state.currentUser.lng || -60.0234;
     const batt = state.currentUser.battery || 95;
+    const userName = state.currentUser.name || 'Você';
 
     const baseUrl = getApiBaseUrl();
     try {
-      const res = await fetch(`${baseUrl}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&lat=${lat}&lon=${lon}&batt=${batt}&speed=10`);
+      const res = await fetch(`${baseUrl}/api/location?circle=${encodeURIComponent(circleId)}&user=${encodeURIComponent(userId)}&lat=${lat}&lon=${lon}&batt=${batt}&speed=10&name=${encodeURIComponent(userName)}&test=1`);
       const data = await res.json();
       if (data.status === 'ok') {
         showToast('Sinal de teste recebido e publicado com sucesso no círculo!', 'info');

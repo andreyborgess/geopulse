@@ -1,7 +1,9 @@
 // GeoPulse - Chat Privado Criptografado E2E (End-to-End Encrypted Private Chat)
 // Mensagens cifradas com AES-GCM 256-bit entre membros do círculo familiar
-import { state } from './sync.js';
+// Suporte a 4 camadas de transporte: WebSockets MQTT, WebRTC P2P direto, API HTTP Serverless e BroadcastChannel
+import { state, getApiBaseUrl } from './sync.js';
 import { broadcastChatMessage } from './realtime.js';
+import { broadcastChatMessageP2P } from './p2p.js';
 import { broadcastChatLocal } from './sync.js';
 import { playChatMessageSound, playTactileClick } from './audio.js';
 import { showToast } from './modals.js';
@@ -11,6 +13,8 @@ import { notifyChatMessage } from './notifications.js';
 let chatMessages = [];
 let activeChatThread = 'all'; // 'all' (Família) ou memberId específico
 let unreadCount = 0;
+let lastChatSyncTs = 0;
+let chatPollInterval = null;
 
 // Carrega histórico persistido localmente
 try {
@@ -19,6 +23,9 @@ try {
     const list = JSON.parse(saved);
     if (Array.isArray(list)) {
       chatMessages = list;
+      if (chatMessages.length > 0) {
+        lastChatSyncTs = Math.max(...chatMessages.map((m) => m.ts || 0));
+      }
     }
   }
 } catch (e) {}
@@ -47,6 +54,64 @@ export function updateChatBadgeUI() {
 }
 
 /**
+ * Sincroniza mensagens do círculo via API Serverless HTTP (/api/chat)
+ * Garante que nenhuma mensagem seja perdida se a conexão WebSocket oscilar
+ */
+export async function syncChatWithServer() {
+  const baseUrl = getApiBaseUrl();
+  const circle = state.circleId || 'FAMILIA-1';
+
+  try {
+    const res = await fetch(`${baseUrl}/api/chat?circle=${encodeURIComponent(circle)}&since=${lastChatSyncTs}`);
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data && Array.isArray(data.messages) && data.messages.length > 0) {
+      let hasNew = false;
+      data.messages.forEach((msg) => {
+        if (!msg || !msg.id || !msg.text) return;
+        if (msg.ts && msg.ts > lastChatSyncTs) {
+          lastChatSyncTs = msg.ts;
+        }
+
+        // Ignora mensagens do próprio usuário
+        if (msg.senderId === state.currentUser.id) return;
+
+        // Evita duplicatas
+        if (chatMessages.some((m) => m.id === msg.id)) return;
+
+        chatMessages.push(msg);
+        hasNew = true;
+      });
+
+      if (hasNew) {
+        saveMessagesToStorage();
+        const modal = document.getElementById('modal-chat');
+        const isChatOpen = modal && modal.style.display !== 'none';
+
+        if (isChatOpen) {
+          renderMessages();
+          scrollToBottom();
+          playChatMessageSound();
+        } else {
+          unreadCount++;
+          updateChatBadgeUI();
+          playChatMessageSound();
+
+          const latest = data.messages[data.messages.length - 1];
+          if (latest) {
+            notifyChatMessage(latest.senderName, latest.text);
+            showToast(`💬 ${latest.senderName}: "${latest.text}"`, 'info');
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.debug('[Chat Sync Error]', e);
+  }
+}
+
+/**
  * Abre o modal de Chat E2E
  * @param {object|null} targetMember - Membro para conversa direta ou null para grupo da família
  */
@@ -70,6 +135,11 @@ export function openChatModal(targetMember = null) {
 
   modal.style.display = 'flex';
 
+  // Sincronização rápida enquanto a conversa está aberta
+  syncChatWithServer();
+  if (chatPollInterval) clearInterval(chatPollInterval);
+  chatPollInterval = setInterval(syncChatWithServer, 3000);
+
   setTimeout(() => {
     const input = document.getElementById('chat-input-text');
     if (input) input.focus();
@@ -84,6 +154,11 @@ export function closeChatModal() {
   playTactileClick();
   const modal = document.getElementById('modal-chat');
   if (modal) modal.style.display = 'none';
+
+  if (chatPollInterval) {
+    clearInterval(chatPollInterval);
+    chatPollInterval = null;
+  }
 }
 
 /**
@@ -93,7 +168,16 @@ function renderThreadSelector() {
   const container = document.getElementById('chat-threads-tabs');
   if (!container) return;
 
-  const members = Array.from(state.members.values());
+  // Filtra outros membros do círculo (não exibe o próprio usuário)
+  const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const members = Array.from(state.members.values()).filter((m) => {
+    if (!m || !m.id) return false;
+    const strId = String(m.id);
+    if (strId === state.currentUser.id || m.isMe || strId === myTraccarId) return false;
+    const mName = String(m.name || '').trim().toLowerCase();
+    if (mName === 'membro familiar' || mName === 'iphone família' || mName === 'você') return false;
+    return true;
+  });
 
   if (activeChatThread !== 'all' && !state.members.has(activeChatThread)) {
     activeChatThread = 'all';
@@ -108,10 +192,10 @@ function renderThreadSelector() {
 
   members.forEach((m) => {
     const isSelected = activeChatThread === m.id;
-    const initial = m.avatar || m.name.slice(0, 2).toUpperCase();
+    const initial = m.avatar || (m.name ? m.name.slice(0, 2).toUpperCase() : 'MB');
     const avatarStyle = m.photo
-      ? `background-image: url('${m.photo}'); background-color: ${m.color || '#007AFF'};`
-      : `background-color: ${m.color || '#007AFF'};`;
+      ? `background-image: url('${m.photo}'); background-color: ${m.color || '#34C759'};`
+      : `background-color: ${m.color || '#34C759'};`;
     html += `
       <button type="button" class="chat-tab-pill ${isSelected ? 'active' : ''}" data-thread="${m.id}">
         <span class="tab-pill-avatar" style="${avatarStyle}">${m.photo ? '' : initial}</span>
@@ -169,7 +253,7 @@ function renderMessages() {
       <div class="chat-empty-state">
         <div class="chat-empty-icon">💬</div>
         <strong>Nenhuma mensagem ainda</strong>
-        <span>Envie uma mensagem criptografada para o círculo. Somente sua família tem a chave para ler.</span>
+        <span>Envie uma mensagem para a família no chat em tempo real.</span>
       </div>
     `;
     return;
@@ -182,7 +266,7 @@ function renderMessages() {
       const avatarStyle = msg.senderPhoto
         ? `background-image: url('${msg.senderPhoto}');`
         : `background-color: ${msg.senderColor || '#007AFF'};`;
-      const initial = msg.senderAvatar || msg.senderName.slice(0, 2).toUpperCase();
+      const initial = msg.senderAvatar || (msg.senderName ? msg.senderName.slice(0, 2).toUpperCase() : 'MB');
 
       return `
         <div class="chat-bubble-row ${isMe ? 'from-me' : 'from-them'}">
@@ -220,8 +304,8 @@ export function sendChatMessage(text) {
   const msgObj = {
     id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     senderId: state.currentUser.id,
-    senderName: state.currentUser.name,
-    senderAvatar: state.currentUser.avatar || state.currentUser.name.slice(0, 2).toUpperCase(),
+    senderName: state.currentUser.name || 'Você',
+    senderAvatar: state.currentUser.avatar || state.currentUser.name.slice(0, 2).toUpperCase() || 'VC',
     senderPhoto: state.currentUser.photo || '',
     senderColor: state.currentUser.color || '#007AFF',
     targetMemberId: targetId,
@@ -231,12 +315,26 @@ export function sendChatMessage(text) {
 
   chatMessages.push(msgObj);
   saveMessagesToStorage();
+  if (msgObj.ts > lastChatSyncTs) lastChatSyncTs = msgObj.ts;
 
-  // Transmite via rede MQTT cifrada com AES-256
+  // 1. Transmite via rede MQTT cifrada com AES-256
   broadcastChatMessage(msgObj);
 
-  // Transmite para abas locais do mesmo browser
+  // 2. Transmite via P2P WebRTC direto para aparelhos conectados
+  broadcastChatMessageP2P(msgObj);
+
+  // 3. Transmite para abas locais do mesmo browser
   broadcastChatLocal(msgObj);
+
+  // 4. Salva no servidor via HTTP POST resiliente
+  const baseUrl = getApiBaseUrl();
+  fetch(`${baseUrl}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ circle: state.circleId, message: msgObj }),
+  }).catch((err) => {
+    console.debug('[Chat HTTP POST]', err);
+  });
 
   renderMessages();
   scrollToBottom();
@@ -249,7 +347,7 @@ export function sendChatMessage(text) {
 }
 
 /**
- * Processa mensagens recebidas em tempo real de outros aparelhos
+ * Processa mensagens recebidas em tempo real de outros aparelhos (MQTT ou P2P)
  */
 export function handleIncomingChatMessage(payload) {
   if (!payload || !payload.id || !payload.text) return;
@@ -267,6 +365,7 @@ export function handleIncomingChatMessage(payload) {
 
   chatMessages.push(payload);
   saveMessagesToStorage();
+  if (payload.ts && payload.ts > lastChatSyncTs) lastChatSyncTs = payload.ts;
 
   // Dispara notificação push e registra na Central de Notificações
   notifyChatMessage(payload.senderName, payload.text);
@@ -332,12 +431,18 @@ export function initChatUI() {
   // Envio de formulário / Enter
   const input = document.getElementById('chat-input-text');
   const btnSend = document.getElementById('btn-send-chat');
+  const form = document.getElementById('chat-form');
 
   const doSend = () => {
     if (input) {
       sendChatMessage(input.value);
     }
   };
+
+  form?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    doSend();
+  });
 
   btnSend?.addEventListener('click', (e) => {
     e.preventDefault();
@@ -362,5 +467,16 @@ export function initChatUI() {
   // EventBus: abrir chat direto com membro
   eventBus.on('member:chat', (member) => {
     openChatModal(member);
+  });
+
+  // Sincronização inicial e periódica em background
+  syncChatWithServer();
+  setInterval(syncChatWithServer, 20000);
+
+  // Re-sincroniza mensagens ao voltar à aba/tela
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      syncChatWithServer();
+    }
   });
 }

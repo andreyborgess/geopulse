@@ -134,8 +134,16 @@ export default async function handler(req, res) {
     const circlePings = [];
     for (const [key, ping] of recentPings.entries()) {
       if (ping && (ping.circleId === circleId || key.startsWith(`${circleId}:`))) {
-        // Filtra para manter apenas dispositivos reais do círculo (ex: 93831419), nunca IDs de sessão web temporários
-        if (ping.userId && !ping.userId.startsWith('user_') && ping.userId !== 'iphone_traccar') {
+        const pName = (ping.userName || '').toLowerCase();
+        // Filtra para manter apenas dispositivos reais do círculo, nunca Membro Familiar ou iPhone Família
+        if (
+          ping.userId &&
+          ping.userId !== 'iphone_traccar' &&
+          ping.userId !== 'test' &&
+          !pName.includes('membro familiar') &&
+          !pName.includes('iphone família') &&
+          !pName.includes('iphone familia')
+        ) {
           circlePings.push(ping);
         }
       }
@@ -195,7 +203,7 @@ export default async function handler(req, res) {
     }
   }
 
-  const devName = body.name || query.name || (userId === '93831419' ? 'Andrey (iPhone)' : 'iPhone Família');
+  const devName = body.name || query.name || (userId === '93831419' ? 'Andrey (iPhone)' : 'Dispositivo GPS');
 
   // Atualiza cache em memória apenas para aparelhos permanentes (evita poluir com IDs de sessão)
   const pingData = {
@@ -212,7 +220,7 @@ export default async function handler(req, res) {
     updatedAt: timestamp,
     receivedAt: Date.now(),
   };
-  if (!userId.startsWith('user_')) {
+  if (userId !== 'test' && !userId.startsWith('demo_')) {
     recentPings.set(cacheKey, pingData);
   }
 

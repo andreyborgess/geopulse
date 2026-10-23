@@ -206,8 +206,8 @@ export function updateUserHeadingCone(heading) {
 
 export function createMemberMarkerIcon(member) {
   const isMe = !!member.isMe || member.id === state.currentUser.id;
-  const color = member.color || (isMe ? '#007AFF' : '#EC4899');
-  const rawName = (member.name ? String(member.name).trim() : '') || (isMe ? 'Você' : 'Membro');
+  const color = member.color || (isMe ? '#007AFF' : '#34C759');
+  const rawName = (member.name ? String(member.name).trim() : '') || (isMe ? 'Você' : (member.relation ? `Membro (${member.relation})` : 'Membro'));
   const avatarText = member.avatar || (rawName ? rawName.slice(0, 2).toUpperCase() : (isMe ? 'VC' : 'MB'));
   const photoUrl = member.photo || '';
   const speed = member.speed ? Math.round(member.speed) : 0;
@@ -364,8 +364,16 @@ export function removeMarker(memberId) {
 
 export function updateAllMarkers() {
   const activeIds = new Set([state.currentUser.id]);
+  const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
+
   state.members.forEach((member) => {
-    if (member && member.id) activeIds.add(String(member.id));
+    if (member && member.id && member.id !== state.currentUser.id) {
+      const strId = String(member.id);
+      if (!(isThisDeviceTheTraccarDevice && (strId === myTraccarId || strId === '93831419'))) {
+        activeIds.add(strId);
+      }
+    }
   });
 
   // Remove do Leaflet qualquer marcador órfão que não pertença mais ao círculo
@@ -377,7 +385,9 @@ export function updateAllMarkers() {
 
   updateMarkerForMember(state.currentUser);
   state.members.forEach((member) => {
-    updateMarkerForMember(member);
+    if (member && member.id !== state.currentUser.id && activeIds.has(String(member.id))) {
+      updateMarkerForMember(member);
+    }
   });
 }
 

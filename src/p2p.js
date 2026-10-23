@@ -29,8 +29,8 @@ export async function enableScreenWakeLock() {
 /**
  * Inicializa a rede P2P WebRTC para o círculo
  */
-export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated }) {
-  const handlers = { onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated };
+export function initP2PNetwork({ onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated, onChatMessageReceived }) {
+  const handlers = { onPeerConnected, onPeerDisconnected, onLocationReceived, onSOSReceived, onRingReceived, onPingUpdated, onChatMessageReceived };
   const circleKey = (state.circleId.replace(/[^a-zA-Z0-9]/g, '') || 'FAMILIA01').slice(0, 16);
   const myShortId = state.currentUser.id.replace(/[^a-zA-Z0-9]/g, '').slice(-6);
 
@@ -209,6 +209,8 @@ function setupConnectionEvents(conn, handlers = {}) {
       if (onPeerDisconnected) onPeerDisconnected(payload.memberId);
     } else if (payload.type === 'RING_DEVICE') {
       if (onRingReceived) onRingReceived(payload);
+    } else if (payload.type === 'CHAT_MESSAGE') {
+      if (handlers.onChatMessageReceived) handlers.onChatMessageReceived(payload);
     } else if (payload.type === 'PING') {
       conn.send({ type: 'PONG', start: payload.start });
     } else if (payload.type === 'PONG') {
@@ -235,6 +237,28 @@ function attemptAutoReconnect(peerId, handlers) {
       connectToRemotePeer(peerId, handlers);
     }
   }, 4000);
+}
+
+export async function broadcastChatMessageP2P(chatMsg) {
+  if (!activeConnections || activeConnections.size === 0) return;
+  try {
+    const payload = {
+      type: 'CHAT_MESSAGE',
+      ...chatMsg,
+    };
+    const encMessage = await encryptPayload(payload);
+    activeConnections.forEach((conn) => {
+      if (conn && conn.open) {
+        try {
+          conn.send(encMessage);
+        } catch (e) {
+          console.debug('[P2P Send Chat Error]', e);
+        }
+      }
+    });
+  } catch (err) {
+    console.debug('[P2P Encrypt Chat Error]', err);
+  }
 }
 
 async function sendP2PBroadcast(message) {

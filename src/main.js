@@ -438,13 +438,26 @@ function setupNetworkConnections() {
       renderPlacesList();
     },
     onLocationReceived: (remoteUser) => {
-      updateMarkerForMember(remoteUser);
+      if (!remoteUser || !remoteUser.id) return;
+      const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+      const isTraccar = remoteUser.id === myTraccarId || remoteUser.source === 'traccar_background' || remoteUser.id === '93831419';
+      const isMeTraccar = isTraccar && ((typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador');
+
+      if (isMeTraccar) {
+        removeMarker(remoteUser.id);
+        removeMarker(myTraccarId);
+        removeMarker('93831419');
+        updateMarkerForMember(state.currentUser);
+      } else if (state.members.has(remoteUser.id)) {
+        updateMarkerForMember(remoteUser);
+        checkMemberLeaveAlerts(remoteUser);
+      }
       renderMembersList();
       checkActivePlaces();
-      checkMemberLeaveAlerts(remoteUser);
     },
     onSOSReceived: (payload) => handleIncomingSOS(payload),
     onRingReceived: (payload) => handleIncomingRing(payload),
+    onChatMessageReceived: (payload) => handleIncomingChatMessage(payload),
     onPingUpdated: (peerId, rttMs) => {
       const p2pVal = document.getElementById('p2p-status-val');
       if (p2pVal) p2pVal.textContent = `P2P ${rttMs}ms`;
@@ -455,10 +468,22 @@ function setupNetworkConnections() {
   initRealtimeNetwork({
     onMemberJoined: (remoteUser, isFirstTimeInvite) => handleMemberJoined(remoteUser, isFirstTimeInvite),
     onMemberUpdated: (remoteUser) => {
-      if (remoteUser) updateMarkerForMember(remoteUser);
+      if (!remoteUser || !remoteUser.id) return;
+      const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+      const isTraccar = remoteUser.id === myTraccarId || remoteUser.source === 'traccar_background' || remoteUser.id === '93831419';
+      const isMeTraccar = isTraccar && ((typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador');
+
+      if (isMeTraccar) {
+        removeMarker(remoteUser.id);
+        removeMarker(myTraccarId);
+        removeMarker('93831419');
+        updateMarkerForMember(state.currentUser);
+      } else if (state.members.has(remoteUser.id)) {
+        updateMarkerForMember(remoteUser);
+        checkMemberLeaveAlerts(remoteUser);
+      }
       renderMembersList();
       checkActivePlaces();
-      if (remoteUser) checkMemberLeaveAlerts(remoteUser);
     },
     onPlaceUpdated: () => {
       renderPlaceOverlays();
@@ -471,10 +496,22 @@ function setupNetworkConnections() {
       renderPlacesList();
     },
     onLocationReceived: (remoteUser) => {
-      updateMarkerForMember(remoteUser);
+      if (!remoteUser || !remoteUser.id) return;
+      const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+      const isTraccar = remoteUser.id === myTraccarId || remoteUser.source === 'traccar_background' || remoteUser.id === '93831419';
+      const isMeTraccar = isTraccar && ((typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador');
+
+      if (isMeTraccar) {
+        removeMarker(remoteUser.id);
+        removeMarker(myTraccarId);
+        removeMarker('93831419');
+        updateMarkerForMember(state.currentUser);
+      } else if (state.members.has(remoteUser.id)) {
+        updateMarkerForMember(remoteUser);
+        checkMemberLeaveAlerts(remoteUser);
+      }
       renderMembersList();
       checkActivePlaces();
-      checkMemberLeaveAlerts(remoteUser);
     },
     onSOSReceived: (payload) => handleIncomingSOS(payload),
     onRingReceived: (payload) => handleIncomingRing(payload),
@@ -579,6 +616,11 @@ function bindEventBus() {
   // Visor Câmera com Realidade Aumentada (AR Precision Finding)
   eventBus.on('member:ar-finder', (member) => {
     openARFinder(member);
+  });
+
+  // Remoção explícita de marcadores órfãos ou duplicados
+  eventBus.on('marker:remove', (id) => {
+    if (id) removeMarker(id);
   });
 }
 
@@ -700,12 +742,18 @@ async function bootstrapApp() {
   const runTraccarPoll = async () => {
     try {
       const result = await syncTraccarLocation();
-      if (result && result.remoteUser) {
-        updateMarkerForMember(result.remoteUser);
-        updateMarkerForMember(state.currentUser);
+      if (result) {
+        if (result.isCurrentUser) {
+          removeMarker('93831419');
+          const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+          removeMarker(myTraccarId);
+          updateMarkerForMember(state.currentUser);
+        } else if (result.remoteUser && state.members.has(result.remoteUser.id)) {
+          updateMarkerForMember(result.remoteUser);
+          checkMemberLeaveAlerts(result.remoteUser);
+        }
         renderMembersList();
         checkActivePlaces();
-        checkMemberLeaveAlerts(result.remoteUser);
       }
     } catch (e) {}
   };

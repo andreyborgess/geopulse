@@ -33,15 +33,20 @@ export function renderMembersList() {
   const container = document.getElementById('members-list');
   if (!container) return;
 
+  const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
+  const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
+
   // Filtra apenas membros válidos reconhecidos, removendo pessoas fictícias, fantasmas de sessão ou duplicatas
   const validMembers = Array.from(state.members.values()).filter((m) => {
     if (!m || !m.id) return false;
     const strId = String(m.id);
-    const mName = String(m.name || '').toLowerCase();
+    const mName = String(m.name || '').trim().toLowerCase();
     if (m.isDemo || strId === 'member_mariana' || strId === 'member_lucas' || strId.startsWith('demo_')) return false;
     if (strId === state.currentUser.id || m.isMe) return false;
-    if (strId.startsWith('user_') || strId.startsWith('gp_') || strId === 'iphone_traccar') return false;
+    if (strId === 'iphone_traccar' || strId === 'me') return false;
     if (mName === 'você' || mName === 'voce') return false;
+    if (mName === 'membro familiar' || mName === 'iphone família' || mName === 'iphone familia') return false;
+    if (isThisDeviceTheTraccarDevice && (strId === myTraccarId || strId === '93831419')) return false;
     return true;
   });
 
@@ -59,9 +64,9 @@ export function renderMembersList() {
       .map((member) => {
         if (!member) return '';
         const isMe = !!member.isMe || member.id === state.currentUser.id;
-        const rawName = (member.name ? String(member.name).trim() : '') || (isMe ? 'Você' : 'Membro Familiar');
+        const rawName = (member.name ? String(member.name).trim() : '') || (isMe ? 'Você' : (member.relation ? `Membro (${member.relation})` : 'Membro Conectado'));
         const avatarText = member.avatar || (rawName ? rawName.slice(0, 2).toUpperCase() : (isMe ? 'VC' : 'MB'));
-        const color = member.color || (isMe ? '#007AFF' : '#EC4899');
+        const color = member.color || (isMe ? '#007AFF' : '#34C759');
         const photo = member.photo || '';
         const avatarStyle = photo
           ? `background-image: url('${photo}'); background-color: ${color};`

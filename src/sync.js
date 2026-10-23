@@ -1,6 +1,7 @@
 // Sincronização em Tempo Real (Cross-Tab via BroadcastChannel + Gerenciamento de Membros com LWW)
 import { calculateBearing } from './geo.js';
 import { generateSecureCircleId } from './crypto.js';
+import { eventBus } from './eventBus.js';
 
 const CHANNEL_NAME = 'geopulse_live_channel';
 let channel = null;
@@ -158,14 +159,18 @@ export function mergeRemoteMember(remoteUser) {
   const cleanName = String(remoteUser.name || '').trim();
   const lowerName = cleanName.toLowerCase();
 
-  // Rejeita IDs de sessão temporária web ('user_...'), IDs de teste, eco do usuário atual ou nomes 'Você'
+  // Rejeita IDs de teste, eco do usuário atual, nomes 'Você' ou 'Membro Familiar'
   if (
     cleanId === state.currentUser.id ||
-    cleanId.startsWith('user_') ||
-    cleanId.startsWith('gp_') ||
     cleanId === 'iphone_traccar' ||
+    cleanId === 'me' ||
+    cleanId === 'undefined' ||
+    cleanId === 'null' ||
     lowerName === 'você' ||
-    lowerName === 'voce'
+    lowerName === 'voce' ||
+    lowerName === 'membro familiar' ||
+    lowerName === 'iphone família' ||
+    lowerName === 'iphone familia'
   ) {
     return false;
   }
@@ -189,6 +194,9 @@ export function mergeRemoteMember(remoteUser) {
       state.members.delete(cleanId);
       saveMembersToStorage();
     }
+    eventBus.emit('marker:remove', cleanId);
+    eventBus.emit('marker:remove', myTraccarId);
+    eventBus.emit('marker:remove', '93831419');
     return true;
   }
 
@@ -202,7 +210,7 @@ export function mergeRemoteMember(remoteUser) {
       ...existing,
       ...remoteUser,
       id: cleanId,
-      name: cleanName || existing?.name || 'Membro Familiar',
+      name: cleanName || existing?.name || (remoteUser.relation ? `Membro (${remoteUser.relation})` : 'Membro Conectado'),
       isMe: false,
       isOnline: remoteUser.isOnline !== false,
       lastSeen: Date.now(),
@@ -247,6 +255,26 @@ export async function syncTraccarLocation() {
       const speedKmH = targetPing.speed || 0;
       const activity = speedKmH > 22 ? '🚗 Em trânsito' : (speedKmH > 3 ? '🚶 Caminhando' : '📍 Parado');
 
+      const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === traccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
+
+      if (isThisDeviceTheTraccarDevice) {
+        state.currentUser.lat = targetPing.lat;
+        state.currentUser.lng = targetPing.lng;
+        if (targetPing.accuracy) state.currentUser.accuracy = targetPing.accuracy;
+        state.currentUser.speed = speedKmH;
+        if (targetPing.heading !== undefined) state.currentUser.heading = targetPing.heading;
+        if (targetPing.battery !== undefined) state.currentUser.battery = targetPing.battery;
+        state.currentUser.activity = activity;
+        state.currentUser.updatedAt = targetPing.updatedAt || Date.now();
+        if (state.members.has(traccarId)) {
+          state.members.delete(traccarId);
+          saveMembersToStorage();
+        }
+        eventBus.emit('marker:remove', traccarId);
+        eventBus.emit('marker:remove', '93831419');
+        return { changed: true, isCurrentUser: true, currentUser: state.currentUser };
+      }
+
       const remoteUser = {
         id: String(targetPing.userId || traccarId),
         name: targetPing.userName || 'Andrey (iPhone)',
@@ -268,7 +296,7 @@ export async function syncTraccarLocation() {
       };
 
       const changed = mergeRemoteMember(remoteUser);
-      return { changed, remoteUser };
+      return { changed, isCurrentUser: false, remoteUser };
     }
   } catch (e) {
     // offline ou erro silencioso
@@ -366,7 +394,7 @@ export function initAppState() {
         parsed.forEach((m) => {
           if (!m || !m.id) return;
           const strId = String(m.id);
-          const mName = String(m.name || '').toLowerCase();
+          const mName = String(m.name || '').trim().toLowerCase();
           if (
             m.isDemo ||
             strId === 'member_mariana' ||
@@ -374,13 +402,15 @@ export function initAppState() {
             strId.startsWith('demo_') ||
             strId === state.currentUser.id ||
             m.isMe ||
-            strId.startsWith('user_') ||
-            strId.startsWith('gp_') ||
             strId === 'iphone_traccar' ||
+            strId === 'me' ||
             mName === 'você' ||
-            mName === 'voce'
+            mName === 'voce' ||
+            mName === 'membro familiar' ||
+            mName === 'iphone família' ||
+            mName === 'iphone familia'
           ) {
-            return; // NUNCA adiciona o próprio usuário, pessoas demo ou fantasmas na lista
+            return; // NUNCA adiciona o próprio usuário, pessoas demo ou Membro Familiar
           }
 
           state.members.set(strId, {
@@ -397,13 +427,15 @@ export function initAppState() {
   state.members.delete(state.currentUser.id);
   state.members.delete('member_mariana');
   state.members.delete('member_lucas');
+  state.members.delete('iphone_traccar');
+  state.members.delete('me');
 
   const myTraccarId = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_traccar_id')) || '93831419';
   const isThisDeviceTheTraccarDevice = (typeof localStorage !== 'undefined' && localStorage.getItem('geopulse_is_traccar_device') === 'true') || state.currentUser.id === myTraccarId || (state.currentUser.name && state.currentUser.name.toLowerCase().includes('andrey')) || state.currentUser.role === 'Administrador';
 
   Array.from(state.members.entries()).forEach(([id, m]) => {
     const strId = String(id);
-    const mName = String(m?.name || '').toLowerCase();
+    const mName = String(m?.name || '').trim().toLowerCase();
     if (
       !m ||
       m.isMe ||
@@ -412,12 +444,14 @@ export function initAppState() {
       strId === 'member_lucas' ||
       strId.startsWith('demo_') ||
       strId === state.currentUser.id ||
-      strId.startsWith('user_') ||
-      strId.startsWith('gp_') ||
       strId === 'iphone_traccar' ||
+      strId === 'me' ||
       mName.includes('você') ||
       mName.includes('voce') ||
-      (isThisDeviceTheTraccarDevice && strId === myTraccarId)
+      mName === 'membro familiar' ||
+      mName === 'iphone família' ||
+      mName === 'iphone familia' ||
+      (isThisDeviceTheTraccarDevice && (strId === myTraccarId || strId === '93831419'))
     ) {
       state.members.delete(id);
     }
@@ -456,12 +490,13 @@ export function saveMembersToStorage() {
   const membersArray = Array.from(state.members.values()).filter((m) => {
     if (!m || !m.id) return false;
     const strId = String(m.id);
-    const mName = String(m.name || '').toLowerCase();
+    const mName = String(m.name || '').trim().toLowerCase();
     if (m.isDemo || strId === 'member_mariana' || strId === 'member_lucas' || strId.startsWith('demo_')) return false;
     if (strId === state.currentUser.id || m.isMe) return false;
-    if (strId.startsWith('user_') || strId.startsWith('gp_') || strId === 'iphone_traccar') return false;
+    if (strId === 'iphone_traccar' || strId === 'me') return false;
     if (mName === 'você' || mName === 'voce') return false;
-    if (isThisDeviceTheTraccarDevice && strId === myTraccarId) return false;
+    if (mName === 'membro familiar' || mName === 'iphone família' || mName === 'iphone familia') return false;
+    if (isThisDeviceTheTraccarDevice && (strId === myTraccarId || strId === '93831419')) return false;
     return true;
   });
 
